@@ -14,6 +14,8 @@ require 'msf/sanity'
 
 require "bundler/setup"
 
+# Shared DB library
+require "msf_models"
 
 # The framework-core depends on Rex
 require 'rex'
@@ -40,6 +42,7 @@ require 'msf/core/module_manager'
 require 'msf/core/plugin_manager'
 require 'msf/core/session'
 require 'msf/core/session_manager'
+
 
 	
 # Wrappers

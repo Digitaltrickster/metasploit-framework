@@ -25,7 +25,6 @@ require 'packetfu'
 require 'uri'
 require 'tmpdir'
 
-require "msf_models"
 
 module Msf
 
@@ -333,7 +332,7 @@ class DBManager
 		conditions = {}
 		conditions[:state] = [Msf::HostState::Alive, Msf::HostState::Unknown] if only_up
 		conditions[:address] = addresses if addresses
-		wspace.hosts.all(:conditions => conditions, :order => :address)
+		wspace.hosts.where(conditions).order(:address)
 	end
 
 
@@ -428,7 +427,7 @@ class DBManager
 		conditions["hosts.address"] = addresses if addresses
 		conditions[:port] = ports if ports
 		conditions[:name] = names if names
-		wspace.services.all(:include => :host, :conditions => conditions, :order => "hosts.address, port")
+		wspace.services.includes(:host).where(conditions).order("hosts.address, port")
 	end
 
 	# Returns a session based on opened_time, host address, and workspace
@@ -608,7 +607,7 @@ class DBManager
 	def get_client(opts)
 		wspace = opts.delete(:workspace) || workspace
 		host   = get_host(:workspace => wspace, :host => opts[:host]) || return
-		client = host.clients.find(:first, :conditions => {:ua_string => opts[:ua_string]})
+		client = host.clients.where({:ua_string => opts[:ua_string]}).first()
 		return client
 	end
 
@@ -687,11 +686,7 @@ class DBManager
 	# This methods returns a list of all credentials in the database
 	#
 	def creds(wspace=workspace)
-		Cred.find(
-			:all,
-			:include => {:service => :host}, # That's some magic right there.
-			:conditions => ["hosts.workspace_id = ?", wspace.id]
-		)
+    Cred.includes({:service => :host}).where("hosts.workspace_id = ?", wspace.id)
 	end
 
 	#
@@ -818,7 +813,7 @@ class DBManager
 
 		case mode
 		when :unique
-			notes = wspace.notes.find(:all, :conditions => conditions)
+			notes = wspace.notes.where(conditions)
 
 			# Only one note of this type should exist, make a new one if it
 			# isn't there. If it is, grab it and overwrite its data.
@@ -829,7 +824,7 @@ class DBManager
 			end
 			note.data = data
 		when :unique_data
-			notes = wspace.notes.find(:all, :conditions => conditions)
+			notes = wspace.notes.where(conditions)
 
 			# Don't make a new Note with the same data as one that already
 			# exists for the given: type and (host or service)
@@ -892,14 +887,9 @@ class DBManager
 		summary = opts.delete(:summary)
 		detail = opts.delete(:detail)
 		crit = opts.delete(:crit)
-		possible_tag = Tag.find(:all,
-			:include => :hosts,
-			:conditions => ["hosts.workspace_id = ? and tags.name = ?",
-				wspace.id,
-				name
-			]
-		).first
-		tag = possible_tag || Tag.new
+    possible_tag = Tag.includes(:hosts).where("hosts.workspace_id = ? and tags.name = ?", wspace.id, name).order("id DESC").limit(1)
+
+		tag = possible_tag.blank? || Tag.new
 		tag.name = name
 		tag.desc = desc
 		tag.report_summary = !!summary
@@ -1144,9 +1134,9 @@ class DBManager
 		raise RuntimeError, "Not workspace safe: #{caller.inspect}"
 		vuln = nil
 		if (service)
-			vuln = Vuln.find(:first, :conditions => [ "name = ? and service_id = ? and host_id = ?", name, service.id, host.id])
-		else
-			vuln = Vuln.find(:first, :conditions => [ "name = ? and host_id = ?", name, host.id])
+			vuln = Vuln.find.where("name = ? and service_id = ? and host_id = ?", name, service.id, host.id).order("id DESC").first()
+    else
+			vuln = Vuln.find.where("name = ? and host_id = ?", name, host.id).first()
 		end
 
 		return vuln
@@ -1197,7 +1187,7 @@ class DBManager
 		host = get_host(:workspace => wspace, :address => address)
 		return unless host
 
-		host.services.all(:conditions => {:proto => proto, :port => port}).each { |s| s.destroy }
+		host.services.where({:proto => proto, :port => port}).each { |s| s.destroy }
 	end
 
 	#
@@ -1758,7 +1748,7 @@ class DBManager
 	# Selected host
 	#
 	def selected_host
-		selhost = WmapTarget.find(:first, :conditions => ["selected != 0"] )
+		selhost = WmapTarget.where("selected != 0").first()
 		if selhost
 			return selhost.host
 		else
@@ -1768,10 +1758,18 @@ class DBManager
 
 	#
 	# WMAP
+	# Selected target
+	#
+	def selected_wmap_target
+		WmapTarget.find.where("selected != 0")
+	end
+
+	#
+	# WMAP
 	# Selected port
 	#
 	def selected_port
-		WmapTarget.find(:first, :conditions => ["selected != 0"] ).port
+    selected_wmap_target.port
 	end
 
 	#
@@ -1779,7 +1777,7 @@ class DBManager
 	# Selected ssl
 	#
 	def selected_ssl
-		WmapTarget.find(:first, :conditions => ["selected != 0"] ).ssl
+    selected_wmap_target.ssl
 	end
 
 	#
@@ -1787,7 +1785,7 @@ class DBManager
 	# Selected id
 	#
 	def selected_id
-		WmapTarget.find(:first, :conditions => ["selected != 0"] ).object_id
+    selected_wmap_target.object_id
 	end
 
 	#
@@ -1807,7 +1805,7 @@ class DBManager
 	# This method wiil be remove on second phase of db merging.
 	#
 	def request_distinct_targets
-		WmapRequest.find(:all, :select => 'DISTINCT host,address,port,ssl')
+		WmapRequest.select('DISTINCT host,address,port,ssl')
 	end
 
 	#
@@ -1865,7 +1863,7 @@ class DBManager
 	# This method returns a list of all requests from target
 	#
 	def target_requests(extra_condition)
-		WmapRequest.find(:all, :conditions => ["wmap_requests.host = ? AND wmap_requests.port = ? #{extra_condition}",selected_host,selected_port])
+		WmapRequest.where("wmap_requests.host = ? AND wmap_requests.port = ? #{extra_condition}",selected_host,selected_port)
 	end
 
 	#
@@ -1884,7 +1882,7 @@ class DBManager
 	# This method allows to query directly the requests table. To be used mainly by modules
 	#
 	def request_sql(host,port,extra_condition)
-		WmapRequest.find(:all, :conditions => ["wmap_requests.host = ? AND wmap_requests.port = ? #{extra_condition}",host,port])
+		WmapRequest.where("wmap_requests.host = ? AND wmap_requests.port = ? #{extra_condition}", host , port)
 	end
 
 	#
@@ -1927,7 +1925,7 @@ class DBManager
 	# Find a target matching this id
 	#
 	def get_target(id)
-		target = WmapTarget.find(:first, :conditions => [ "id = ?", id])
+		target = WmapTarget.where("id = ?", id).first()
 		return target
 	end
 
