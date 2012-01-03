@@ -35,7 +35,7 @@ private
 			return hosts if opts[:addresses].class != Array
 			conditions = {}
 			conditions[:address] = opts[:addresses]
-			hent = wspace.hosts.all(:conditions => conditions)
+			hent = wspace.hosts.where(conditions)
 			hosts |= hent if hent.class == Array
 		end
 		return hosts
@@ -51,7 +51,7 @@ private
 					conditions = {}
 					conditions[:port] = opts[:port] if opts[:port]
 					conditions[:proto] = opts[:proto] if opts[:proto]
-					sret = h.services.all(:conditions => conditions)
+					sret = h.services.where(conditions)
 					next if sret == nil
 					services |= sret if sret.class == Array
 					services << sret if sret.class == Msf::DBManager::Service
@@ -63,7 +63,7 @@ private
 			conditions = {}
 			conditions[:port] = opts[:port] if opts[:port]
 			conditions[:proto] = opts[:proto] if opts[:proto]
-			sret = wspace.services.all(:conditions => conditions)
+			sret = wspace.services.where(conditions)
 			services |= sret if sret.class == Array
 			services << sret if sret.class == Msf::DBManager::Service
 		end
@@ -90,7 +90,7 @@ public
 
 		ret = {}
 		ret[:hosts] = []
-		wspace.hosts.all(:conditions => conditions, :order => :address).each do |h|
+		wspace.hosts.where(conditions).order(:address).each do |h|
 			host = {}
 			host[:created_at] = h.created_at.to_i
 			host[:address] = h.address.to_s
@@ -122,7 +122,7 @@ public
 		if opts[:addresses]
 			conditions = {}
 			conditions[:address] = opts[:addresses] if opts[:addresses]
-			hosts = wspace.hosts.all(:conditions => conditions, :order => :address)
+			hosts = wspace.hosts.where(conditions).order.(:address)
 		elsif opts[:host] || opts[:address]
 			host = self.framework.db.get_host(opts)
 			hosts << host
@@ -186,7 +186,7 @@ public
 		if opts[:addresses]
 			conditions = {}
 			conditions[:address] = opts[:addresses] if opts[:addresses]
-			hosts = wspace.hosts.all(:conditions => conditions, :order => :address)
+			hosts = wspace.hosts.where(conditions).order(:address)
 		elsif opts[:host] || opts[:address]
 			host = self.framework.db.get_host(opts)
 			hosts << host
@@ -399,7 +399,7 @@ public
 			conditions[:proto] = opts[:proto] if opts[:proto]
 			conditions[:port] = opts[:port] if opts[:port]
 			conditions[:name] = opts[:names] if opts[:names]
-			sret = wspace.services.all(:conditions => conditions, :order => "hosts.address, port")
+			sret = wspace.services.where(conditions).order("hosts.address, port")
 		else
 			sret = host.services
 		end
@@ -541,7 +541,7 @@ public
 		if opts[:addresses]
 			conditions = {}
 			conditions[:address] = opts[:addresses] if opts[:addresses]
-			hosts = wspace.hosts.all(:conditions => conditions, :order => :address)
+			hosts = wspace.hosts.where(conditions).order(:address)
 		elsif opts[:host] || opts[:address]
 			host = self.framework.db.get_host(opts)
 			hosts << host
@@ -791,7 +791,7 @@ public
 		elsif opts[:addresses]
 			return { :result => 'failed' } if opts[:addresses].class != Array
 			conditions = { :address => opts[:addresses] }
-			hent = wspace.hosts.all(:conditions => conditions)
+			hent = wspace.hosts.where(conditions)
 			return { :result => 'failed' } if hent == nil
 			hosts |= hent if hent.class == Array
 			hosts << hent if hent.class == Msf::DBManager::Host
@@ -803,7 +803,7 @@ public
 					conditions = {}
 					conditions[:port] = opts[:port] if opts[:port]
 					conditions[:proto] = opts[:proto] if opts[:proto]
-					sret = h.services.all(:conditions => conditions)
+					sret = h.services.where(conditions)
 					next if sret == nil
 					services << sret if sret.class == Msf::DBManager::Service
 					services |= sret if sret.class == Array
@@ -815,7 +815,7 @@ public
 			conditions = {}
 			conditions[:port] = opts[:port] if opts[:port]
 			conditions[:proto] = opts[:proto] if opts[:proto]
-			sret = wspace.services.all(:conditions => conditions)
+			sret = wspace.services.where(conditions)
 			services << sret if sret and sret.class == Msf::DBManager::Service
 			services |= sret if sret and sret.class == Array
 		end
@@ -846,7 +846,7 @@ public
 		elsif opts[:addresses]
 			return { :result => 'failed' } if opts[:addresses].class != Array
 			conditions = { :address => opts[:addresses] }
-			hent = wspace.hosts.all(:conditions => conditions)
+			hent = wspace.hosts.where(conditions)
 			return { :result => 'failed' } if hent == nil
 			hosts |= hent if hent.class == Array
 			hosts << hent if hent.class == Msf::DBManager::Host
@@ -1047,7 +1047,7 @@ public
 				conditions = {}
 				conditions[:ua_name] = opts[:ua_name] if opts[:ua_name]
 				conditions[:ua_ver] = opts[:ua_ver] if opts[:ua_ver]
-				cret = h.clients.all(:conditions => conditions)
+				cret = h.clients.where(conditions)
 			else
 				cret = h.clients
 			end
@@ -1087,7 +1087,7 @@ public
 				conditions = {}
 				conditions[:ua_name] = opts[:ua_name] if opts[:ua_name]
 				conditions[:ua_ver] = opts[:ua_ver] if opts[:ua_ver]
-				cret = h.clients.all(:conditions => conditions)
+				cret = h.clients.where(conditions)
 			else
 				cret = h.clients
 			end
