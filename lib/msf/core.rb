@@ -12,11 +12,6 @@
 # Sanity check this version of ruby
 require 'msf/sanity'
 
-require "bundler/setup"
-
-# Shared DB library
-require "msf_models"
-
 # The framework-core depends on Rex
 require 'rex'
 require 'rex/ui'
@@ -44,7 +39,6 @@ require 'msf/core/session'
 require 'msf/core/session_manager'
 
 
-	
 # Wrappers
 require 'msf/core/encoded_payload'
 

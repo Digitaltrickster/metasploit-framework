@@ -166,6 +166,8 @@ class Metasploit3 < Msf::Post
 					:user => cred["username"],
 					:pass => cred["password"],
 					:type => 'password',
+					:source_id => session.db_record.id,
+					:source_type => "exploit",
 					:active => true
 				}
 
@@ -191,6 +193,7 @@ class Metasploit3 < Msf::Post
 
 		#tell user what's going on
 		print_status("#{ret["Count"]} credentials found in the Credential Store")
+		return credentials unless arr_len > 0
 		if ret["Count"] > 0
 			print_status("Decrypting each set of credentials, this may take a minute...")
 
@@ -228,7 +231,7 @@ class Metasploit3 < Msf::Post
 					cred["password"] = "unsupported type"
 				end
 				#only add to array if there is a target name
-				unless cred["targetname"] == "Error Decrypting"
+				unless cred["targetname"] == "Error Decrypting" or cred["password"] == "unsupported type"
 					print_status("Credential sucessfully decrypted for: #{cred["targetname"]}")
 					credentials << cred
 				end

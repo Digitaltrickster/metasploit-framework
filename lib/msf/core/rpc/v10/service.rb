@@ -104,9 +104,9 @@ class Service
 		begin
 			if req.method != "POST"
 				if req && req.method
-					raise ArgumentError, "Invalid Request Verb: `#{req.method.inspect}'"
+					raise ArgumentError, "Invalid Request Verb: '#{req.method.inspect}'"
 				else
-					raise ArgumentError, "Invalid Request: `#{req.inspect}'"
+					raise ArgumentError, "Invalid Request: '#{req.inspect}'"
 				end
 			end
 
@@ -123,7 +123,7 @@ class Service
 			group, funct = msg.shift.split(".", 2)
 
 			if not self.handlers[group]
-				raise ArgumentError, "Unknown API Group: `#{group.inspect}'"
+				raise ArgumentError, "Unknown API Group: '#{group.inspect}'"
 			end
 
 			doauth = true
@@ -135,7 +135,7 @@ class Service
 			end
 
 			if not self.handlers[group].respond_to?(mname)
-				raise ArgumentError, "Unknown API Call: `#{mname.inspect}'"
+				raise ArgumentError, "Unknown API Call: '#{mname.inspect}'"
 			end
 
 			if doauth
@@ -145,7 +145,7 @@ class Service
 				end
 			end
 
-			::Timeout.timeout(self.dispatcher_timeout) { puts "Group: #{group} Mname: #{mname}";self.handlers[group].send(mname, *msg) }
+			::Timeout.timeout(self.dispatcher_timeout) { self.handlers[group].send(mname, *msg) }
 
 		rescue ::Exception => e
 			elog("RPC Exception: #{e.class} #{e.to_s} #{e.backtrace} #{msg.inspect} #{req.inspect}")

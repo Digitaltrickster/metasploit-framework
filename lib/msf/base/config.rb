@@ -20,6 +20,12 @@ class Config < Hash
 	#
 	def self.get_config_root
 
+		# Use MSFCFGDIR environment variable first. See feature request #5797
+		val = Rex::Compat.getenv('MSF_CFGROOT_CONFIG')
+		if (val and File.directory?(val))
+			return val
+		end
+
 		# Windows-specific environment variables
 		['HOME', 'LOCALAPPDATA', 'APPDATA', 'USERPROFILE'].each do |dir|
 			val = Rex::Compat.getenv(dir)
@@ -81,7 +87,7 @@ class Config < Hash
 	def self.module_directory
 		self.new.module_directory
 	end
-
+	
 	#
 	# Calls the instance method.
 	#
@@ -137,7 +143,7 @@ class Config < Hash
 	def self.user_module_directory
 		self.new.user_module_directory
 	end
-
+	
 	#
 	# Calls the instance method.
 	#
@@ -228,7 +234,7 @@ class Config < Hash
 	def module_directory
 		install_root + FileSep + self['ModuleDirectory']
 	end
-
+	
 	#
 	# Returns the path that scripts can be loaded from.
 	#
@@ -277,7 +283,7 @@ class Config < Hash
 	def user_module_directory
 		config_directory + FileSep + "modules"
 	end
-
+	
 	#
 	# Returns the user-specific plugin base path
 	#
@@ -303,6 +309,7 @@ class Config < Hash
 	# Initializes configuration, creating directories as necessary.
 	#
 	def init
+		FileUtils.mkdir_p(module_directory)
 		FileUtils.mkdir_p(config_directory)
 		FileUtils.mkdir_p(log_directory)
 		FileUtils.mkdir_p(session_log_directory)

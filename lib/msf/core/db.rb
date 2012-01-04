@@ -25,7 +25,6 @@ require 'packetfu'
 require 'uri'
 require 'tmpdir'
 
-
 module Msf
 
 ###
@@ -131,7 +130,7 @@ class DBManager
 			ip_x = ip.to_x
 			ip_i = ip.to_i
 		when "String"
-			if ipv4_validator(ip)
+			if ipv46_validator(ip)
 				ip_x = ip
 				ip_i = Rex::Socket.addr_atoi(ip)
 			else
@@ -155,9 +154,17 @@ class DBManager
 		return false
 	end
 
+	def ipv46_validator(addr)
+		ipv4_validator(addr) or ipv6_validator(addr)
+	end
+
 	def ipv4_validator(addr)
 		return false unless addr.kind_of? String
-		addr =~ /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/
+		Rex::Socket.is_ipv4?(addr)
+	end
+
+	def ipv6_validator(addr)
+		Rex::Socket.is_ipv6?(addr)
 	end
 
 	# Takes a space-delimited set of ips and ranges, and subjects
@@ -165,7 +172,7 @@ class DBManager
 	def validate_ips(ips)
 		ret = true
 		begin
-			ips.split(' ').each {|ip|
+			ips.split(/\s+/).each {|ip|
 				unless Rex::Socket::RangeWalker.new(ip).ranges
 					ret = false
 					break
@@ -228,6 +235,8 @@ class DBManager
 		if wspace.kind_of? String
 			wspace = find_workspace(wspace)
 		end
+		
+		address, scope = address.split('%', 2)
 		return wspace.hosts.find_by_address(address)
 	end
 
@@ -252,6 +261,7 @@ class DBManager
 	#	:os_lang    -- something like "English", "French", or "en-US"
 	#	:arch       -- one of the ARCH_* constants
 	#	:mac        -- the host's MAC address
+	#	:scope      -- interface identifier for link-local IPv6
 	#
 	def report_host(opts)
 
@@ -268,7 +278,10 @@ class DBManager
 
 		if not addr.kind_of? Host
 			addr = normalize_host(addr)
-			unless ipv4_validator(addr)
+			addr, scope = addr.split('%', 2)
+			opts[:scope] = scope if scope
+			 
+			unless ipv46_validator(addr)
 				raise ::ArgumentError, "Invalid IP address in report_host(): #{addr}"
 			end
 
@@ -306,7 +319,7 @@ class DBManager
 		host.state       = HostState::Alive if not host.state
 		host.comm        = ''        if not host.comm
 		host.workspace   = wspace    if not host.workspace
-
+		
 		if host.changed?
 			msf_import_timestamps(opts,host)
 			host.save!
@@ -332,7 +345,7 @@ class DBManager
 		conditions = {}
 		conditions[:state] = [Msf::HostState::Alive, Msf::HostState::Unknown] if only_up
 		conditions[:address] = addresses if addresses
-		wspace.hosts.where(conditions).order(:address)
+		wspace.hosts.all(:conditions => conditions, :order => :address)
 	end
 
 
@@ -369,6 +382,11 @@ class DBManager
 			addr = host.address
 		else
 			host = report_host(hopts)
+		end
+
+		if opts[:port].to_i.zero?
+			dlog("Skipping port zero for service '%s' on host '%s'" % [opts[:name],host.address])
+			return nil
 		end
 
 		ret  = {}
@@ -427,7 +445,7 @@ class DBManager
 		conditions["hosts.address"] = addresses if addresses
 		conditions[:port] = ports if ports
 		conditions[:name] = names if names
-		wspace.services.includes(:host).where(conditions).order("hosts.address, port")
+		wspace.services.all(:include => :host, :conditions => conditions, :order => "hosts.address, port")
 	end
 
 	# Returns a session based on opened_time, host address, and workspace
@@ -607,7 +625,7 @@ class DBManager
 	def get_client(opts)
 		wspace = opts.delete(:workspace) || workspace
 		host   = get_host(:workspace => wspace, :host => opts[:host]) || return
-		client = host.clients.where({:ua_string => opts[:ua_string]}).first()
+		client = host.clients.find(:first, :conditions => {:ua_string => opts[:ua_string]})
 		return client
 	end
 
@@ -686,7 +704,11 @@ class DBManager
 	# This methods returns a list of all credentials in the database
 	#
 	def creds(wspace=workspace)
-    Cred.includes({:service => :host}).where("hosts.workspace_id = ?", wspace.id)
+		Cred.find(
+			:all,
+			:include => {:service => :host}, # That's some magic right there.
+			:conditions => ["hosts.workspace_id = ?", wspace.id]
+		)
 	end
 
 	#
@@ -813,7 +835,7 @@ class DBManager
 
 		case mode
 		when :unique
-			notes = wspace.notes.where(conditions)
+			notes = wspace.notes.find(:all, :conditions => conditions)
 
 			# Only one note of this type should exist, make a new one if it
 			# isn't there. If it is, grab it and overwrite its data.
@@ -824,7 +846,7 @@ class DBManager
 			end
 			note.data = data
 		when :unique_data
-			notes = wspace.notes.where(conditions)
+			notes = wspace.notes.find(:all, :conditions => conditions)
 
 			# Don't make a new Note with the same data as one that already
 			# exists for the given: type and (host or service)
@@ -887,9 +909,14 @@ class DBManager
 		summary = opts.delete(:summary)
 		detail = opts.delete(:detail)
 		crit = opts.delete(:crit)
-    possible_tag = Tag.includes(:hosts).where("hosts.workspace_id = ? and tags.name = ?", wspace.id, name).order("id DESC").limit(1)
-
-		tag = possible_tag.blank? || Tag.new
+		possible_tag = Tag.find(:all,
+			:include => :hosts,
+			:conditions => ["hosts.workspace_id = ? and tags.name = ?",
+				wspace.id,
+				name
+			]
+		).first
+		tag = possible_tag || Tag.new
 		tag.name = name
 		tag.desc = desc
 		tag.report_summary = !!summary
@@ -960,13 +987,39 @@ class DBManager
 
 		ret = {}
 
+		#Check to see if the creds already exist. We look also for a downcased username with the
+		#same password because we can fairly safely assume they are not in fact two seperate creds.
+		#this allows us to hedge against duplication of creds in the DB.
+
+		if duplicate_ok
 		# If duplicate usernames are okay, find by both user and password (allows
 		# for actual duplicates to get modified updated_at, sources, etc)
-		if duplicate_ok
-			cred = service.creds.find_or_initialize_by_user_and_ptype_and_pass(token[0] || "", ptype, token[1] || "")
+			if token[0].nil? or token[0].empty?
+				cred = service.creds.find_or_initialize_by_user_and_ptype_and_pass(token[0] || "", ptype, token[1] || "")
+			else
+				cred = service.creds.find_by_user_and_ptype_and_pass(token[0] || "", ptype, token[1] || "")
+				unless cred
+					dcu = token[0].downcase
+					cred = service.creds.find_by_user_and_ptype_and_pass( dcu || "", ptype, token[1] || "")
+					unless cred
+						cred = service.creds.find_or_initialize_by_user_and_ptype_and_pass(token[0] || "", ptype, token[1] || "")
+					end
+				end
+			end
 		else
 			# Create the cred by username only (so we can change passwords)
-			cred = service.creds.find_or_initialize_by_user_and_ptype(token[0] || "", ptype)
+			if token[0].nil? or token[0].empty?
+				cred = service.creds.find_or_initialize_by_user_and_ptype(token[0] || "", ptype)
+			else
+				cred = service.creds.find_by_user_and_ptype(token[0] || "", ptype)
+				unless cred
+					dcu = token[0].downcase
+					cred = service.creds.find_by_user_and_ptype_and_pass( dcu || "", ptype, token[1] || "")
+					unless cred
+						cred = service.creds.find_or_initialize_by_user_and_ptype(token[0] || "", ptype)
+					end
+				end
+			end
 		end
 
 		# Update with the password
@@ -1134,9 +1187,9 @@ class DBManager
 		raise RuntimeError, "Not workspace safe: #{caller.inspect}"
 		vuln = nil
 		if (service)
-			vuln = Vuln.find.where("name = ? and service_id = ? and host_id = ?", name, service.id, host.id).order("id DESC").first()
-    else
-			vuln = Vuln.find.where("name = ? and host_id = ?", name, host.id).first()
+			vuln = Vuln.find(:first, :conditions => [ "name = ? and service_id = ? and host_id = ?", name, service.id, host.id])
+		else
+			vuln = Vuln.find(:first, :conditions => [ "name = ? and host_id = ?", name, host.id])
 		end
 
 		return vuln
@@ -1175,6 +1228,7 @@ class DBManager
 	# Deletes a host and associated data matching this address/comm
 	#
 	def del_host(wspace, address, comm='')
+		address, scope = address.split('%', 2)
 		host = wspace.hosts.find_by_address_and_comm(address, comm)
 		host.destroy if host
 	end
@@ -1187,7 +1241,7 @@ class DBManager
 		host = get_host(:workspace => wspace, :address => address)
 		return unless host
 
-		host.services.where({:proto => proto, :port => port}).each { |s| s.destroy }
+		host.services.all(:conditions => {:proto => proto, :port => port}).each { |s| s.destroy }
 	end
 
 	#
@@ -1208,6 +1262,7 @@ class DBManager
 	# Look for an address across all comms
 	#
 	def has_host?(wspace,addr)
+		address, scope = addr.split('%', 2)
 		wspace.hosts.find_by_address(addr)
 	end
 
@@ -1443,7 +1498,7 @@ class DBManager
 			end
 
 			# Force addr to be the address and not hostname
-			addr = Rex::Socket.getaddress(addr)
+			addr = Rex::Socket.getaddress(addr, true)
 		end
 
 		ret = {}
@@ -1748,7 +1803,7 @@ class DBManager
 	# Selected host
 	#
 	def selected_host
-		selhost = WmapTarget.where("selected != 0").first()
+		selhost = WmapTarget.find(:first, :conditions => ["selected != 0"] )
 		if selhost
 			return selhost.host
 		else
@@ -1758,18 +1813,10 @@ class DBManager
 
 	#
 	# WMAP
-	# Selected target
-	#
-	def selected_wmap_target
-		WmapTarget.find.where("selected != 0")
-	end
-
-	#
-	# WMAP
 	# Selected port
 	#
 	def selected_port
-    selected_wmap_target.port
+		WmapTarget.find(:first, :conditions => ["selected != 0"] ).port
 	end
 
 	#
@@ -1777,7 +1824,7 @@ class DBManager
 	# Selected ssl
 	#
 	def selected_ssl
-    selected_wmap_target.ssl
+		WmapTarget.find(:first, :conditions => ["selected != 0"] ).ssl
 	end
 
 	#
@@ -1785,7 +1832,7 @@ class DBManager
 	# Selected id
 	#
 	def selected_id
-    selected_wmap_target.object_id
+		WmapTarget.find(:first, :conditions => ["selected != 0"] ).object_id
 	end
 
 	#
@@ -1805,7 +1852,7 @@ class DBManager
 	# This method wiil be remove on second phase of db merging.
 	#
 	def request_distinct_targets
-		WmapRequest.select('DISTINCT host,address,port,ssl')
+		WmapRequest.find(:all, :select => 'DISTINCT host,address,port,ssl')
 	end
 
 	#
@@ -1863,7 +1910,7 @@ class DBManager
 	# This method returns a list of all requests from target
 	#
 	def target_requests(extra_condition)
-		WmapRequest.where("wmap_requests.host = ? AND wmap_requests.port = ? #{extra_condition}",selected_host,selected_port)
+		WmapRequest.find(:all, :conditions => ["wmap_requests.host = ? AND wmap_requests.port = ? #{extra_condition}",selected_host,selected_port])
 	end
 
 	#
@@ -1882,7 +1929,7 @@ class DBManager
 	# This method allows to query directly the requests table. To be used mainly by modules
 	#
 	def request_sql(host,port,extra_condition)
-		WmapRequest.where("wmap_requests.host = ? AND wmap_requests.port = ? #{extra_condition}", host , port)
+		WmapRequest.find(:all, :conditions => ["wmap_requests.host = ? AND wmap_requests.port = ? #{extra_condition}",host,port])
 	end
 
 	#
@@ -1925,7 +1972,7 @@ class DBManager
 	# Find a target matching this id
 	#
 	def get_target(id)
-		target = WmapTarget.where("id = ?", id).first()
+		target = WmapTarget.find(:first, :conditions => [ "id = ?", id])
 		return target
 	end
 
@@ -2184,7 +2231,7 @@ class DBManager
 			# then it's an amap log
 			@import_filedata[:type] = "Amap Log"
 			return :amap_log
-		elsif (firstline =~ /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/)
+		elsif ipv46_validator(firstline)
 			# then its an IP list
 			@import_filedata[:type] = "IP Address List"
 			return :ip_list
@@ -2233,7 +2280,7 @@ class DBManager
 				next if port.to_i == 0
 				uri = URI.parse(host.attributes['sitename']) rescue nil
 				next unless uri and uri.scheme
-				# Collect and report scan descriptions. 
+				# Collect and report scan descriptions.
 				host.elements.each do |item|
 					if item.elements['description']
 						desc_text = item.elements['description'].text
@@ -2255,16 +2302,16 @@ class DBManager
 						if item.attributes['osvdbid'].to_i != 0
 							desc_data[:refs] = ["OSVDB-#{item.attributes['osvdbid']}"]
 							desc_data[:name] = "NIKTO-#{item.attributes['id']}"
-							desc_data.delete(:data) 
+							desc_data.delete(:data)
 							desc_data.delete(:type)
 							desc_data.delete(:update)
 							report_vuln(desc_data)
 						end
 					end
-				end				
+				end
 			end
 		end
-	end		
+	end
 
 	def import_libpcap_file(args={})
 		filename = args[:filename]
@@ -2508,7 +2555,7 @@ class DBManager
 			end
 
 			next unless [addr,port,user,pass].compact.size == 4
-			next unless ipv4_validator(addr) # Skip Malformed addrs
+			next unless ipv46_validator(addr) # Skip Malformed addrs
 			next unless port[/^[0-9]+$/] # Skip malformed ports
 			if bl.include? addr
 				next
@@ -2622,7 +2669,7 @@ class DBManager
 				target_data = ::File.open(target) {|f| f.read 1024}
 				if import_filetype_detect(target_data) == :msf_xml
 					@import_filedata[:zip_extracted_xml] = target
-					break
+					#break
 				end
 			end
 		end
@@ -2968,6 +3015,11 @@ class DBManager
 				%W{created-at updated-at}.each { |datum|
 					if cred.elements[datum].respond_to? :text
 						cred_data[datum.gsub("-","_")] = nils_for_nulls(cred.elements[datum].text.to_s.strip)
+					end
+				}
+				%W{source-type source-id}.each { |datum|
+					if cred.elements[datum].respond_to? :text
+						cred_data[datum.gsub("-","_").intern] = nils_for_nulls(cred.elements[datum].text.to_s.strip)
 					end
 				}
 				if cred_data[:pass] == "<masked>"
@@ -4195,7 +4247,7 @@ class DBManager
 		when "http-proxy";                  "http"
 		when "iiimsf";                      "db2"
 		when "oracle-tns";                  "oracle"
-		when "quickbooksrds";               "metasploit"		
+		when "quickbooksrds";               "metasploit"
 		when /^dns-(udp|tcp)$/;             "dns"
 		when /^dce[\s+]rpc$/;               "dcerpc"
 		else
@@ -4266,7 +4318,7 @@ class DBManager
 			data = r[6]
 
 			# If there's no resolution, or if it's malformed, skip it.
-			next unless ipv4_validator(addr)
+			next unless ipv46_validator(addr)
 
 			if bl.include? addr
 				next
@@ -4371,7 +4423,7 @@ class DBManager
 				hname = host.elements['HostName'].text
 			end
 			addr ||= host.elements['HostName'].text
-			next unless ipv4_validator(addr) # Skip resolved names and SCAN-ERROR.
+			next unless ipv46_validator(addr) # Skip resolved names and SCAN-ERROR.
 			if bl.include? addr
 				next
 			else
@@ -4441,7 +4493,7 @@ class DBManager
 			hobj = nil
 			addr = host['addr'] || host['hname']
 
-			next unless ipv4_validator(addr) # Catches SCAN-ERROR, among others.
+			next unless ipv46_validator(addr) # Catches SCAN-ERROR, among others.
 
 			if bl.include? addr
 				next
@@ -4755,7 +4807,7 @@ class DBManager
 			hobj = nil
 			addr = host['addr'] || host['hname']
 
-			next unless ipv4_validator(addr) # Catches SCAN-ERROR, among others.
+			next unless ipv46_validator(addr) # Catches SCAN-ERROR, among others.
 
 			if bl.include? addr
 				next
@@ -5176,8 +5228,9 @@ class DBManager
 		norm_host = nil
 
 		if (host.kind_of? String)
-			# If it's an IPv4 addr with a host on the end, strip the port
-			if host =~ /((\d{1,3}\.){3}\d{1,3}):\d+/
+		
+			# If it's an IPv4 addr with a port on the end, strip the port
+			if Rex::Socket.is_ipv4?(host) and host =~ /((\d{1,3}\.){3}\d{1,3}):\d+/
 				norm_host = $1
 			else
 				norm_host = host

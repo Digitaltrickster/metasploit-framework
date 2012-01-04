@@ -89,7 +89,7 @@ class Metasploit3 < Msf::Post
 			print_status("!! Failed to load incognito on #{session.sid} / #{session.tunnel_peer}")
 			return false
 		end
-		
+
 		## verify domain_user contains a domain
 		if domain_user !~ /\\/
 			domain_user = "#{domain}\\#{domain_user}"
@@ -220,7 +220,7 @@ class Metasploit3 < Msf::Post
 	# Run Method for when run command is issued
 	def run
 		print_status("Running module on #{sysinfo['Computer']}")
-	
+
 		## get system, if requested
 		if (session.sys.config.getuid() !~ /SYSTEM/ and datastore['GETSYSTEM'])
 			get_system
@@ -255,7 +255,7 @@ class Metasploit3 < Msf::Post
 
 		already_user = false
 		already_member_group = false
-		
+
 		## Add user to the domain
 		if (datastore['ADDTODOMAIN'] == true)
 			user_add_res = run_cmd("net user \"#{datastore['USERNAME']}\" /domain",false)
@@ -352,7 +352,7 @@ class Metasploit3 < Msf::Post
 
 		return members
 	end
-	
+
 	## get value from registry key
 	def reg_getvaldata(key,valname)
 		value = nil

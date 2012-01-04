@@ -1,6 +1,8 @@
 
 require 'msf/core/model/serialized_prefs'
 
+require 'msf/core/model/activerecord_patches'
+
 require 'msf/core/model/user'
 require 'msf/core/model/api_key'
 require 'msf/core/model/macro'

@@ -1,5 +1,8 @@
 require 'open3'
+require 'fileutils'
 require 'rex/proto/ntlm/crypt'
+
+
 
 module Msf
 
@@ -33,48 +36,57 @@ module Auxiliary::JohnTheRipper
 
 	def autodetect_platform
 		cpuinfo_base = ::File.join(Msf::Config.install_root, "data", "cpuinfo")
+		return @run_path if @run_path
 
 		case ::RUBY_PLATFORM
 		when /mingw|cygwin|mswin/
-			data = `"#{cpuinfo_base}/cpuinfo.exe"`
+			data = `"#{cpuinfo_base}/cpuinfo.exe"` rescue nil
 			case data
 			when /sse2/
-				@run_path = "run.win32.sse2/john.exe"
+				@run_path ||= "run.win32.sse2/john.exe"
 			when /mmx/
-				@run_path = "run.win32.mmx/john.exe"
+				@run_path ||= "run.win32.mmx/john.exe"
 			else
-				@run_path = "run.win32.any/john.exe"
+				@run_path ||= "run.win32.any/john.exe"
 			end
+
 		when /x86_64-linux/
-			data = `#{cpuinfo_base}/cpuinfo.ia64.bin`
+			::FileUtils.chmod(0755, "#{cpuinfo_base}/cpuinfo.ia64.bin") rescue nil
+			data = `#{cpuinfo_base}/cpuinfo.ia64.bin` rescue nil
 			case data
 			when /mmx/
-				@run_path = "run.linux.x64.mmx/john"
+				@run_path ||= "run.linux.x64.mmx/john"
 			else
-				@run_path = "run.linux.x86.any/john"
+				@run_path ||= "run.linux.x86.any/john"
 			end
+
 		when /i[\d]86-linux/
-			data = `#{cpuinfo_base}/cpuinfo.ia32.bin`
+			::FileUtils.chmod(0755, "#{cpuinfo_base}/cpuinfo.ia32.bin") rescue nil
+			data = `#{cpuinfo_base}/cpuinfo.ia32.bin` rescue nil
 			case data
 			when /sse2/
-				@run_path = "run.linux.x86.sse2/john"
+				@run_path ||= "run.linux.x86.sse2/john"
 			when /mmx/
-				@run_path = "run.linux.x86.mmx/john"
+				@run_path ||= "run.linux.x86.mmx/john"
 			else
-				@run_path = "run.linux.x86.any/john"
+				@run_path ||= "run.linux.x86.any/john"
 			end
 		end
+		@run_path
 	end
 
 	def john_session_id
 		@session_id ||= ::Rex::Text.rand_text_alphanumeric(8)
 	end
 
+	def john_pot_file
+		::File.join( ::Msf::Config.config_directory, "john.pot" )
+	end
+
 	def john_cracked_passwords
 		ret = {}
-		pot = ::File.join( ::File.dirname( john_binary_path ), "john.pot" )
-		return ret if not ::File.exist?(pot)
-		::File.open(pot, "rb") do |fd|
+		return ret if not ::File.exist?(john_pot_file)
+		::File.open(john_pot_file, "rb") do |fd|
 			fd.each_line do |line|
 				hash,clear = line.sub(/\r?\n$/, '').split(",", 2)
 				ret[hash] = clear
@@ -85,7 +97,12 @@ module Auxiliary::JohnTheRipper
 
 	def john_show_passwords(hfile, format=nil)
 		res = {:cracked => 0, :uncracked => 0, :users => {} }
-		cmd = [ john_binary_path,  "--show", "--conf=" + ::File.join(john_base_path, "confs", "john.conf"), hfile]
+
+		pot  = john_pot_file
+		conf = ::File.join(john_base_path, "confs", "john.conf")
+
+		cmd = [ john_binary_path,  "--show", "--conf=#{conf}", "--pot=#{pot}", hfile]
+
 		if format
 			cmd << "--format=" + format
 		end
@@ -110,16 +127,16 @@ module Auxiliary::JohnTheRipper
 					bits.last.chomp!
 					res[ :users ][ bits[0] ] = bits.drop(1)
 				end
-				
+
 			end
 		end
 		res
 	end
-	
+
 	def john_unshadow(passwd_file,shadow_file)
-		
+
 		retval=""
-		
+
 		if File.exists?(passwd_file)
 			unless File.readable?(passwd_file)
 				print_error("We do not have permission to read #{passwd_file}")
@@ -129,7 +146,7 @@ module Auxiliary::JohnTheRipper
 			print_error("File does not exist: #{passwd_file}")
 			return nil
 		end
-		
+
 		if File.exists?(shadow_file)
 			unless File.readable?(shadow_file)
 				print_error("We do not have permission to read #{shadow_file}")
@@ -139,10 +156,10 @@ module Auxiliary::JohnTheRipper
 			print_error("File does not exist: #{shadow_file}")
 			return nil
 		end
-		
-		
+
+
 		cmd = [ john_binary_path.gsub(/john$/, "unshadow"), passwd_file , shadow_file ]
-		
+
 		if RUBY_VERSION =~ /^1\.8\./
 			cmd = cmd.join(" ")
 		end
@@ -160,16 +177,23 @@ module Auxiliary::JohnTheRipper
 
 	def john_binary_path
 		if datastore['JOHN_PATH'] and ::File.file?(datastore['JOHN_PATH'])
-			return datastore['JOHN_PATH']
+			path = datastore['JOHN_PATH']
+			::FileUtils.chmod(0755, path) rescue nil
+			path
 		end
+
 		if not @run_path
 			if ::RUBY_PLATFORM =~ /mingw|cygwin|mswin/
 				::File.join(john_base_path, "john.exe")
 			else
-				::File.join(john_base_path, "john")
+				path = ::File.join(john_base_path, "john")
+				::FileUtils.chmod(0755, path) rescue nil
+				path
 			end
 		else
-			::File.join(john_base_path, @run_path)
+			path = ::File.join(john_base_path, @run_path)
+			::FileUtils.chmod(0755, path) rescue nil
+			path
 		end
 	end
 
@@ -205,12 +229,20 @@ module Auxiliary::JohnTheRipper
 
 		res = {:cracked => 0, :uncracked => 0, :users => {} }
 
-		cmd = [ john_binary_path,  "--session=" + john_session_id]
+		# Don't bother making a log file, we'd just have to rm it when we're
+		# done anyway.
+		cmd = [ john_binary_path,  "--session=" + john_session_id, "--nolog"]
 
 		if opts[:conf]
 			cmd << ( "--conf=" + opts[:conf] )
 		else
 			cmd << ( "--conf=" + ::File.join(john_base_path, "confs", "john.conf") )
+		end
+
+		if opts[:pot]
+			cmd << ( "--pot=" + opts[:pot] )
+		else
+			cmd << ( "--pot=" + john_pot_file )
 		end
 
 		if opts[:format]
@@ -244,11 +276,6 @@ module Auxiliary::JohnTheRipper
 				print_status("Output: #{line.strip}")
 			end
 		end
-
-		# Clean up temporary files created by --session
-		# XXX: Surely there is a better way to control
-		#      the location of these.
-		::FileUtils.rm_f("#{john_session_id}.log")
 
 		res
 	end

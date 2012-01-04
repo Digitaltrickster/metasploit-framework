@@ -23,7 +23,7 @@ class Metasploit3 < Msf::Auxiliary
 			'Version'         => '$Revision$',
 			'Description'     => %Q{
 					This module uses John the Ripper to identify weak passwords that have been
-				aquired from unsahdowed passwd files from Unix systems. The module will noly crack
+				acquired from unshadowed passwd files from Unix systems. The module will only crack
 				MD5 and DES implementations by default. Set Crypt to true to also try to crack
 				Blowfish and SHA implementations. Warning: This is much slower.
 			},
@@ -34,7 +34,7 @@ class Metasploit3 < Msf::Auxiliary
 				] ,
 			'License'         => MSF_LICENSE  # JtR itself is GPLv2, but this wrapper is MSF (BSD)
 		)
-		
+
 		register_options(
 			[
 				OptBool.new('Crypt',[false, 'Try crypt() format hashes(Very Slow)', false])
@@ -51,11 +51,11 @@ class Metasploit3 < Msf::Auxiliary
 
 		hashlist = Rex::Quickfile.new("jtrtmp")
 
-		myloots = myworkspace.loots.where('ltype=?', 'linux.hashes')
+		myloots = myworkspace.loots.find(:all, :conditions => ['ltype=?', 'linux.hashes'])
 		unless myloots.nil? or myloots.empty?
 			myloots.each do |myloot|
 				begin
-					usf = File.open(myloot.path)
+					usf = File.open(myloot.path, "rb")
 				rescue Exception => e
 					print_error("Unable to read #{myloot.path} \n #{e}")
 				end
@@ -128,7 +128,7 @@ class Metasploit3 < Msf::Auxiliary
 
 		seed = []
 		#Seed the wordlist with Database , Table, and Instance Names
-		schemas = myworkspace.notes.where('ntype like ?', '%.schema%')
+		schemas = myworkspace.notes.find(:all, :conditions => ['ntype like ?', '%.schema%'])
 		unless schemas.nil? or schemas.empty?
 			schemas.each do |anote|
 				anote.data.each do |key,value|
@@ -138,7 +138,7 @@ class Metasploit3 < Msf::Auxiliary
 			end
 		end
 
-		instances = myworkspace.notes.where('ntype=?', 'mssql.instancename')
+		instances = myworkspace.notes.find(:all, :conditions => ['ntype=?', 'mssql.instancename'])
 		unless instances.nil? or instances.empty?
 			instances.each do |anote|
 				seed << anote.data['InstanceName']
@@ -148,7 +148,7 @@ class Metasploit3 < Msf::Auxiliary
 		# Seed the wordlist with usernames, passwords, and hostnames
 
 		myworkspace.hosts.find(:all).each {|o| seed << john_expand_word( o.name ) if o.name }
-		myworkspace.creds.each do |o| 
+		myworkspace.creds.each do |o|
 			seed << john_expand_word( o.user ) if o.user
 			seed << john_expand_word( o.pass ) if (o.pass and o.ptype !~ /hash/)
 		end
@@ -157,7 +157,7 @@ class Metasploit3 < Msf::Auxiliary
 		john_cracked_passwords.values {|v| seed << v }
 
 		#Grab the default John Wordlist
-		john = File.open(john_wordlist_path, "r")
+		john = File.open(john_wordlist_path, "rb")
 		john.each_line{|line| seed << line.chomp}
 
 		unless seed.empty?

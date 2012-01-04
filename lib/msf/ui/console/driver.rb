@@ -6,6 +6,9 @@ require 'msf/ui/console/command_dispatcher'
 require 'msf/ui/console/table'
 require 'find'
 require 'erb'
+require 'rexml/document'
+require 'fileutils'
+require 'digest/md5'
 
 module Msf
 module Ui
@@ -16,6 +19,7 @@ module Console
 # This class implements a user interface driver on a console interface.
 #
 ###
+
 class Driver < Msf::Ui::Driver
 
 	ConfigCore  = "framework/core"
@@ -120,6 +124,7 @@ class Driver < Msf::Ui::Driver
 			print_error("***")
 		end
 
+
 		# Add the database dispatcher if it is usable
 		if (framework.db.usable)
 			require 'msf/ui/console/command_dispatcher/db'
@@ -168,7 +173,7 @@ class Driver < Msf::Ui::Driver
 		end
 
 		# Parse any specified database.yml file
-		if framework.db.usable
+		if framework.db.usable and not opts['SkipDatabaseInit']
 			# Look for our database configuration in the following places, in order:
 			#	command line arguments
 			#	environment variable
@@ -207,6 +212,108 @@ class Driver < Msf::Ui::Driver
 			# If the opt is nil here, we load ~/.msf3/msfconsole.rc
 			load_resource(opts['Resource'])
 		end
+	end
+
+	#
+	# Configure a default output path for jUnit XML output
+	#
+	def junit_setup(output_path)
+		output_path = ::File.expand_path(output_path)
+
+		::FileUtils.mkdir_p(output_path)
+		@junit_output_path = output_path
+		@junit_error_count = 0
+		print_status("Test Output: #{output_path}")
+
+		# We need at least one test success in order to pass
+		junit_pass("framework_loaded")
+	end
+
+	#
+	# Emit a new jUnit XML output file representing an error
+	#
+	def junit_error(tname, ftype, data = nil)
+
+		if not @junit_output_path
+			raise RuntimeError, "No output path, call junit_setup() first"
+		end
+
+		data ||= framework.inspect.to_s
+
+		e = REXML::Element.new("testsuite")
+
+		c = REXML::Element.new("testcase")
+		c.attributes["classname"] = "msfrc"
+		c.attributes["name"]  = tname
+
+		f = REXML::Element.new("failure")
+		f.attributes["type"] = ftype
+
+		f.text = data
+		c << f
+		e << c
+
+		bname = ("msfrpc_#{tname}").gsub(/[^A-Za-z0-9\.\_]/, '')
+		bname << "_" + Digest::MD5.hexdigest(tname)
+
+		fname = ::File.join(@junit_output_path, "#{bname}.xml")
+		cnt   = 0
+		while ::File.exists?( fname )
+			cnt  += 1
+			fname = ::File.join(@junit_output_path, "#{bname}_#{cnt}.xml")
+		end
+
+		::File.open(fname, "w") do |fd|
+			fd.write(e.to_s)
+		end
+
+		print_error("Test Error: #{tname} - #{ftype} - #{data}")
+	end
+	
+	#
+	# Emit a new jUnit XML output file representing a success
+	#
+	def junit_pass(tname)
+
+		if not @junit_output_path
+			raise RuntimeError, "No output path, call junit_setup() first"
+		end
+
+		# Generate the structure of a test case run
+		e = REXML::Element.new("testsuite")
+		c = REXML::Element.new("testcase")
+		c.attributes["classname"] = "msfrc"
+		c.attributes["name"]  = tname
+		e << c
+
+		# Generate a unique name
+		bname = ("msfrpc_#{tname}").gsub(/[^A-Za-z0-9\.\_]/, '')
+		bname << "_" + Digest::MD5.hexdigest(tname)
+
+		# Generate the output path, allow multiple test with the same name
+		fname = ::File.join(@junit_output_path, "#{bname}.xml")
+		cnt   = 0
+		while ::File.exists?( fname )
+			cnt  += 1
+			fname = ::File.join(@junit_output_path, "#{bname}_#{cnt}.xml")
+		end
+
+		# Write to our test output location, as specified with junit_setup
+		::File.open(fname, "w") do |fd|
+			fd.write(e.to_s)
+		end
+
+		print_good("Test Pass: #{tname}")
+	end
+
+
+	#
+	# Emit a jUnit XML output file and throw a fatal exception
+	#
+	def junit_fatal_error(tname, ftype, data)
+		junit_error(tname, ftype, data)
+		print_error("Exiting")
+		run_single("exit -y")
 	end
 
 	#
@@ -276,22 +383,34 @@ class Driver < Msf::Ui::Driver
 		path ||= File.join(Msf::Config.config_directory, 'msfconsole.rc')
 		return if not ::File.readable?(path)
 		resource_file = ::File.read(path)
-		
+
+		self.active_resource = resource_file
+
 		# Process ERB directives first
-		print_status "Processing #{path} for ERB directives."		
+		print_status "Processing #{path} for ERB directives."
 		erb = ERB.new(resource_file)
 		processed_resource = erb.result(binding)
 
 		lines = processed_resource.each_line.to_a
+		bindings = {}
 		while lines.length > 0
-			
+
 			line = lines.shift
 			break if not line
 			line.strip!
 			next if line.length == 0
 			next if line =~ /^#/
-	
-			if line =~ /<ruby>/
+
+			# Pretty soon, this is going to need an XML parser :)
+			# TODO: case matters for the tag and for binding names
+			if line =~ /<ruby/
+				if line =~ /\s+binding=(?:'(\w+)'|"(\w+)")(>|\s+)/
+					bin = ($~[1] || $~[2])
+					bindings[bin] = binding unless bindings.has_key? bin
+					bin = bindings[bin]
+				else
+					bin = binding
+				end
 				buff = ''
 				while lines.length > 0
 					line = lines.shift
@@ -302,7 +421,7 @@ class Driver < Msf::Ui::Driver
 				if ! buff.empty?
 					print_status("resource (#{path})> Ruby Code (#{buff.length} bytes)")
 					begin
-						eval(buff, binding)
+						eval(buff, bin)
 					rescue ::Interrupt
 						raise $!
 					rescue ::Exception => e
@@ -314,6 +433,8 @@ class Driver < Msf::Ui::Driver
 				run_single(line)
 			end
 		end
+
+		self.active_resource = nil
 	end
 
 	#
@@ -400,7 +521,7 @@ class Driver < Msf::Ui::Driver
 			when "loglevel"
 				handle_loglevel(val) if (glob)
 			when "prompt"
-			  update_prompt(val, framework.datastore['PromptChar'] || DefaultPromptChar, true)
+				update_prompt(val, framework.datastore['PromptChar'] || DefaultPromptChar, true)
 			when "promptchar"
 				update_prompt(framework.datastore['Prompt'], val, true)
 		end
@@ -437,6 +558,10 @@ class Driver < Msf::Ui::Driver
 	# The active session associated with the driver.
 	#
 	attr_accessor :active_session
+	#
+	# The active resource file being processed by the driver
+	#
+	attr_accessor :active_resource
 
 	#
 	# If defanged is true, dangerous functionality, such as exploitation, irb,

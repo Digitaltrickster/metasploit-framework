@@ -127,7 +127,7 @@ class Metasploit3 < Msf::Post
 
 		# get system, if requested.
 		get_system if (session.sys.config.getuid() !~ /SYSTEM/ and datastore['GETSYSTEM'])
-	
+
 		## Make sure we meet the requirements before running the module
 		if not priv_check
 			print_error("Abort! Did not pass the priv check")
@@ -193,7 +193,11 @@ class Metasploit3 < Msf::Post
 
 			#At the end of the loop, store and print results for this da_user
 			if not tbl_pids.rows.empty? and session.framework.db.active
-				report_note(tbl_pids.to_csv)
+				report_note(
+					:host => session.tunnel_peer,
+					:type => "pid",
+					:data => tbl_pids.to_csv
+				)
 			end
 		end
 	end

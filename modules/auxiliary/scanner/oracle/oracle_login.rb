@@ -36,7 +36,7 @@ class Metasploit3 < Msf::Auxiliary
 				[
 					[ 'URL', 'http://www.oracle.com/us/products/database/index.html' ],
 					[ 'CVE', '1999-0502'], # Weak password CVE
-					[ 'URL', 'http://nmap.org/nsedoc/scripts/oracle-brute.html']	
+					[ 'URL', 'http://nmap.org/nsedoc/scripts/oracle-brute.html']
 				],
 			'Version'        => '$Revision$'
 		))
@@ -78,7 +78,7 @@ class Metasploit3 < Msf::Auxiliary
 	def sid
 		datastore['SID'].to_s
 	end
-	
+
 	def nmap_build_args(credpath)
 		nmap_reset_args
 		nmap_append_arg "-P0"
@@ -165,7 +165,8 @@ class Metasploit3 < Msf::Auxiliary
 					print_good "#{msg} Success: #{user}:#{pass} (SID: #{sid})"
 					report_auth_info(
 						:host => addr, :port => port, :proto => "tcp",
-						:user => "#{sid}/#{user}", :pass => pass, :active => true
+						:user => "#{sid}/#{user}", :pass => pass,
+						:source_type => "user_supplied", :active => true
 					)
 				elsif oline =~ /Account locked/
 					if not @oracle_reported
@@ -177,7 +178,8 @@ class Metasploit3 < Msf::Auxiliary
 					print_status "#{msg} Locked: #{user} (SID: #{sid}) -- account valid but locked"
 					report_auth_info(
 						:host => addr, :port => port, :proto => "tcp",
-						:user => "#{sid}/#{user}", :active => false
+						:user => "#{sid}/#{user}",
+						:source_type => "user_supplied", :active => false
 					)
 				elsif oline =~ /^\s+ERROR: (.*)/
 					print_error "#{msg} NSE script error: #{$1}"

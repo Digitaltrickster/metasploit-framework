@@ -12,9 +12,6 @@ module Msf
 ###
 
 class DBManager
-	# Provide access to ActiveRecord models
-	include MsfModels
-
 
 	# Provides :framework and other accessors
 	include Framework::Offspring
@@ -39,7 +36,7 @@ class DBManager
 
 	# Stores a TaskManager for serializing database events
 	attr_accessor :sink
-	
+
 	# Flag to indicate database migration has completed
 	attr_accessor :migrated
 
@@ -65,6 +62,10 @@ class DBManager
 
 		# Load ActiveRecord if it is available
 		begin
+			require 'rubygems'
+			require 'active_record'
+			require 'msf/core/db_objects'
+			require 'msf/core/model'
 
 			# Database drivers can reset our KCODE, do not let them
 			$KCODE = 'NONE' if RUBY_VERSION =~ /^1\.8\./
@@ -158,7 +159,7 @@ class DBManager
 
 			# Set the default workspace
 			framework.db.workspace = framework.db.default_workspace
-			
+
 			# Flag that migration has completed
 			self.migrated = true
 		rescue ::Exception => e

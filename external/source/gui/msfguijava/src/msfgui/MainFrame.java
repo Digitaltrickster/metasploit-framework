@@ -5,7 +5,6 @@ package msfgui;
 
 import java.awt.Component;
 import java.awt.HeadlessException;
-import javax.swing.JTable;
 import org.jdesktop.application.*;
 import java.awt.event.*;
 import java.io.*;
@@ -26,7 +25,6 @@ import javax.swing.JMenu;
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPopupMenu;
-import javax.swing.table.DefaultTableModel;
 import org.jdesktop.application.Task;
 import org.jdesktop.swingworker.SwingWorker;
 
@@ -36,11 +34,12 @@ public class MainFrame extends FrameView {
 
 	public HashMap sessionWindowMap;
 	public RpcConnection rpcConn;
-	private SwingWorker sessionsPollTimer;
+	private SwingWorker sessionsPollTimer = null;
 	private SessionsTable sessionsTableModel;
 	private JPopupMenu jobPopupMenu, shellPopupMenu, meterpreterPopupMenu, sessionPopupMenu;
 	private String clickedJob;
 	public Map[] selectedSessions;
+	private MsfTable[] tables;
 	private SearchWindow searchWin;
 	private javax.swing.JTable eventsTable;
 	private javax.swing.JScrollPane eventsPane;
@@ -49,13 +48,6 @@ public class MainFrame extends FrameView {
 		super(app);
 		MsfFrame.setLnF();
 		initComponents();
-		eventsPane = new javax.swing.JScrollPane();
-		eventsTable = new MsfTable(new String [] {
-				"Host", "Created", "Updated", "Name", "Critical", "Username", "Info"
-			});
-		eventsTable.setName("eventsTable"); // NOI18N
-		eventsPane.setViewportView(eventsTable);
-		tabbedPane.addTab("Events", eventsPane); // NOI18N
 		sessionsTableModel = null;
 		sessionWindowMap = new HashMap();
 
@@ -119,16 +111,24 @@ public class MainFrame extends FrameView {
 			}
 		});
 		//Set up GUI, RPC connection, and recent modules
-		setupSessionsPollTimer();
+		connectRpc(); // Connect to RPC daemon
 		setupPopupMenus();
+		if(rpcConn != null)
+			handleNewRpcConnection();
 		MsfguiApp.fileChooser = new JFileChooser();
-		connectRpc();
 		getFrame().addWindowListener(new WindowAdapter() {
 			public void windowClosing(WindowEvent we) {
 				if(!MsfguiApp.shuttingDown && !confirmStop())
 					throw new RuntimeException("Closing aborted.");
 			}
 		});
+		//Events pane
+		eventsPane = new javax.swing.JScrollPane();
+		eventsTable = new MsfTable(rpcConn, new String [] {"Host", "Created", "Updated", "Name", "Critical", "Username", "Info"
+								}, "events", new String[]{"host","created_at","updated_at","name","critical","username", "info"});
+		eventsTable.setName("eventsTable"); // NOI18N
+		eventsPane.setViewportView(eventsTable);// Create a scrollable text area
+		tabbedPane.addTab("Events", eventsPane); // NOI18N
 		//Setup icon
 		this.getFrame().setIconImage( resourceMap.getImageIcon("main.icon").getImage());
 		//Disable tabs by default
@@ -147,6 +147,18 @@ public class MainFrame extends FrameView {
 			}
 		}
 		MsfFrame.updateSizes(getFrame());
+		this.tables = new MsfTable[]{(MsfTable)eventsTable, (MsfTable)hostsTable,
+			(MsfTable)clientsTable, (MsfTable)servicesTable, (MsfTable)vulnsTable,
+			(MsfTable)notesTable, (MsfTable)lootsTable, (MsfTable)credsTable};
+		// Setup table autoquery code
+		((MsfTable)eventsTable).addAutoAdjuster(eventsPane);
+		((MsfTable)hostsTable).addAutoAdjuster(hostsPane);
+		((MsfTable)clientsTable).addAutoAdjuster(clientsPane);
+		((MsfTable)servicesTable).addAutoAdjuster(servicesPane);
+		((MsfTable)vulnsTable).addAutoAdjuster(vulnsPane);
+		((MsfTable)notesTable).addAutoAdjuster(notesPane);
+		((MsfTable)lootsTable).addAutoAdjuster(lootsPane);
+		((MsfTable)credsTable).addAutoAdjuster(credsPane);
 	}
 	/** Before exit, check whether the daemon should be stopped or just the session terminated */
 	private boolean confirmStop() {
@@ -253,7 +265,8 @@ public class MainFrame extends FrameView {
 						}
 						publish((Object)jobStrings);
 					} catch (MsfException msfEx) {
-						msfEx.printStackTrace();
+						if(!MsfguiApp.shuttingDown || !msfEx.getMessage().contains("Connection refused"))
+							msfEx.printStackTrace();
 						publish("Error getting session list "+msfEx);
 						if(!msfEx.getMessage().contains("timed out")) // on timeout, just retry
 							return new ArrayList();
@@ -388,7 +401,8 @@ nameloop:	for (int i = 0; i < names.length; i++) {
 	}
 
    /** Makes a menu tree with expandList for exploits and auxiliary. Also start jobs/sessions watcher. */
-	public void getModules() {
+	public void handleNewRpcConnection() {
+		setupSessionsPollTimer();
 		searchWin = new SearchWindow(rpcConn);
 		MsfguiApp.addRecentModules(rpcConn, this);
 		getContext().getActionMap(this).get("moduleTask").actionPerformed(new java.awt.event.ActionEvent(this,1234,""));
@@ -490,33 +504,26 @@ nameloop:	for (int i = 0; i < names.length; i++) {
         sessionsPane = new javax.swing.JScrollPane();
         sessionsTable = new javax.swing.JTable();
         hostsPane = new javax.swing.JScrollPane();
-        hostsTable = new MsfTable(new String [] {
-            "Created", "Address", "Address6", "MAC", "Name", "State", "OS name", "OS flavor", "OS SP", "OS lang", "Updated", "Purpose", "Info"
-        });
+        hostsTable = new MsfTable(rpcConn, new String [] {"Created", "Address", "Address6", "MAC", "Name", "State", "OS name", "OS flavor", "OS SP", "OS lang", "Updated", "Purpose", "Info"}
+            , "hosts",new String[]{"created_at", "address", "address6", "mac", "name", "state", "os_name", "os_flavor", "os_sp", "os_lang", "updated_at", "purpose", "info"});
         clientsPane = new javax.swing.JScrollPane();
-        clientsTable = new MsfTable(new String [] {
-            "Host", "UA String", "UA Name", "UA Ver", "Created", "Updated"
-        });
+        clientsTable = new MsfTable(rpcConn, new String [] {"Host", "UA String", "UA Name", "UA Ver", "Created", "Updated"}
+            , "clients", new String[]{"host", "ua_string", "ua_name", "ua_ver", "created_at", "updated_at"});
         servicesPane = new javax.swing.JScrollPane();
-        servicesTable = new MsfTable(new String [] {
-            "Host", "Created", "Updated", "Port", "Proto", "State", "Name", "Info"
-        });
+        servicesTable = new MsfTable(rpcConn, new String [] {"Host", "Created", "Updated", "Port", "Proto", "State", "Name", "Info"}
+            , "services", new String[]{"host", "created_at", "updated_at", "port", "proto", "state", "name", "info"});
         vulnsPane = new javax.swing.JScrollPane();
-        vulnsTable = new MsfTable(new String [] {
-            "Port", "Proto", "Time", "Host", "Name", "Refs"
-        });
+        vulnsTable = new MsfTable(rpcConn, new String [] {"Port", "Proto", "Time", "Host", "Name", "Refs"
+        }, "vulns", new String[]{"port", "proto", "time", "host", "name", "refs"});
         notesPane = new javax.swing.JScrollPane();
-        notesTable = new MsfTable(new String [] {
-            "Time", "Host", "Service", "Type", "Data"
-        });
+        notesTable = new MsfTable(rpcConn, new String [] {"Time", "Host", "Service", "Type", "Data"
+        }, "notes", new String[]{"time", "host", "service", "type", "data"});
         lootsPane = new javax.swing.JScrollPane();
-        lootsTable = new MsfTable(new String [] {
-            "Host", "Service", "Ltype", "Ctype", "Data", "Created", "Updated", "Name", "Info"
-        });
+        lootsTable = new MsfTable(rpcConn,new String [] {"Host", "Service", "Ltype", "Ctype", "Data", "Created", "Updated", "Name", "Info"
+        }, "loots", new String[]{"host", "service", "ltype", "ctype", "data", "created_at", "updated_at", "name", "info"});
         credsPane = new javax.swing.JScrollPane();
-        credsTable = new MsfTable(new String [] {
-            "Host", "Time", "Port", "Proto", "Sname", "Type", "User", "Pass", "Active"
-        });
+        credsTable = new MsfTable(rpcConn, new String [] {"Host", "Time", "Port", "Proto", "Sname", "Type", "User", "Pass", "Active"
+        }, "creds", new String[]{"host", "time", "port", "proto", "sname", "type", "user", "pass", "active"});
         menuBar = new javax.swing.JMenuBar();
         javax.swing.JMenu fileMenu = new javax.swing.JMenu();
         connectRpcMenuItem = new javax.swing.JMenuItem();
@@ -1191,7 +1198,6 @@ nameloop:	for (int i = 0; i < names.length; i++) {
         helpMenu.add(onlineHelpMenu);
 
         aboutMenuItem.setAction(actionMap.get("showAboutBox")); // NOI18N
-        aboutMenuItem.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_F1, 0));
         aboutMenuItem.setName("aboutMenuItem"); // NOI18N
         helpMenu.add(aboutMenuItem);
 
@@ -1242,6 +1248,8 @@ nameloop:	for (int i = 0; i < names.length; i++) {
 
 	private void connectRpcMenuItemActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_connectRpcMenuItemActionPerformed
 		connectRpc();
+		if(rpcConn != null)
+			handleNewRpcConnection();
 	}//GEN-LAST:event_connectRpcMenuItemActionPerformed
 
 	private void clearHistoryItemActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_clearHistoryItemActionPerformed
@@ -1318,19 +1326,10 @@ nameloop:	for (int i = 0; i < names.length; i++) {
 		}
 		try { //Now load data out of current workspace
 			MsfguiApp.workspace = ((Map) rpcConn.execute("db.current_workspace")).get("workspace").toString();
-			if(DraggableTabbedPane.isVisible(eventsTable))
-				reAdd(eventsTable,(List) ((Map)rpcConn.execute("db.events",MsfguiApp.workspace)).get("events"),
-						new String[]{"host","created_at","updated_at","name","critical","username","info"});
-			if(all || DraggableTabbedPane.isVisible(lootsTable))
-				reAdd(lootsTable,(List) ((Map)rpcConn.execute("db.loots",MsfguiApp.workspace)).get("loots"),
-						new String[]{"host","service","ltype","ctype","data","created_at","updated_at","name","info"});
-			reAddQuery(hostsTable,"hosts",new String[]{"created_at","address","address6","mac","name","state","os_name",
-							"os_flavor","os_sp","os_lang","updated_at","purpose","info"}, all);
-			reAddQuery(clientsTable,"clients",new String[]{"host","ua_string","ua_name","ua_ver","created_at","updated_at"}, all);
-			reAddQuery(servicesTable,  "services", new String[]{"host","created_at","updated_at","port","proto","state","name","info"}, all);
-			reAddQuery(vulnsTable,"vulns",new String[]{"port","proto","time","host","name","refs"}, all);
-			reAddQuery(notesTable,"notes",new String[]{"time", "host", "service", "type", "data"}, all);
-			reAddQuery(credsTable,"creds",new String[]{"host", "time", "port", "proto", "sname", "type", "user", "pass", "active"}, all);
+			for(MsfTable table : tables){
+				table.rpcConn = rpcConn;
+				table.reAddQuery(all, 0);
+			}
 		} catch (MsfException mex) {
 			if(!mex.getMessage().equals("database not loaded"))
 				mex.printStackTrace();
@@ -1440,7 +1439,7 @@ nameloop:	for (int i = 0; i < names.length; i++) {
 			reloadDb(false);
 		if(evt.getKeyCode() != KeyEvent.VK_DELETE)
 			return;
-		JTable tab = (JTable)evt.getSource();
+		MsfTable tab = (MsfTable)evt.getSource();
 		for(int row : tab.getSelectedRows()){
 			try {
 				HashMap map = new HashMap();
@@ -1451,7 +1450,7 @@ nameloop:	for (int i = 0; i < names.length; i++) {
 				MsfguiApp.showMessage(getFrame(), mex);
 			}
 		}//delete then readd
-		reAddQuery(tab,name+"s",colNames, true);
+		tab.reAddQuery(true, 0);
 	}
 	private void hostsTableKeyReleased(java.awt.event.KeyEvent evt) {//GEN-FIRST:event_hostsTableKeyReleased
 		tableDelCheck(evt,"host",new String[]{"created_at","address","address6","mac","name","state","os_name",
@@ -1471,7 +1470,7 @@ nameloop:	for (int i = 0; i < names.length; i++) {
 	}//GEN-LAST:event_notesTableKeyReleased
 
 	private void lootsTableKeyReleased(java.awt.event.KeyEvent evt) {//GEN-FIRST:event_lootsTableKeyReleased
-		reAddQuery(lootsTable,"loots",new String[]{"host","service","ltype","ctype","data","created_at","updated_at","name","info"}, true);
+		((MsfTable)lootsTable).reAddQuery(true, 0);
 	}//GEN-LAST:event_lootsTableKeyReleased
 
 	private void clientsTableKeyReleased(java.awt.event.KeyEvent evt) {//GEN-FIRST:event_clientsTableKeyReleased
@@ -1623,8 +1622,6 @@ nameloop:	for (int i = 0; i < names.length; i++) {
 	private void connectRpc() {
 		//make new rpcConnection
 		rpcConn = OpenConnectionDialog.getConnection(this);
-		if(rpcConn != null)
-			getModules();
 	}
 
    /** Attempts to start msfrpcd and connect to it.*/
@@ -1659,6 +1656,7 @@ nameloop:	for (int i = 0; i < names.length; i++) {
 		});
 		jobsList.addMouseListener( new PopupMouseListener() {
 			public void mouseReleased(MouseEvent e){
+				super.mouseReleased(e);
 				int indx = jobsList.locationToIndex(e.getPoint());
 				if (indx == -1)
 					return;
@@ -1974,35 +1972,4 @@ nameloop:	for (int i = 0; i < names.length; i++) {
 	private final Icon[] busyIcons = new Icon[15];
 	private int busyIconIndex = 0;
 	private JDialog aboutBox;
-
-	/** Clear a table's contents, reenabling the tab, and replace with contents of data returned from a db call */
-	private void reAddQuery(JTable table, String call, String[] cols, boolean force) {
-		if(!force && !DraggableTabbedPane.isVisible(table))
-			return; //Don't re-add if not visible
-		try {
-			HashMap arg = new HashMap();
-			arg.put("workspace", MsfguiApp.workspace);
-			List data = (List) ((Map)rpcConn.execute("db."+call,arg)).get(call);
-			if(data == null)
-				return;
-			reAdd(table, data, cols);
-		} catch (MsfException mex) {
-			mex.printStackTrace();
-			if(mex.getMessage().equals("database not loaded"))
-				throw mex;
-		}
-	}
-	private void reAdd(JTable table, List data, String[] cols) throws MsfException {
-		DefaultTableModel mod = (DefaultTableModel) table.getModel();
-		while (mod.getRowCount() > 0)
-			mod.removeRow(0);
-		for (Object dataObj : data) {
-			Object[] row = new Object[cols.length];
-			for (int i = 0; i < cols.length; i++)
-				row[i] = ((Map) dataObj).get(cols[i]);
-			mod.addRow(row);
-		}
-		TableHelper.fitColumnWidths(mod, table);
-		DraggableTabbedPane.setTabComponentEnabled(table, true);
-	}
 }

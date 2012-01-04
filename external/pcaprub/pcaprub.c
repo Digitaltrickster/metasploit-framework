@@ -14,7 +14,29 @@
  #include <sys/time.h>
 #endif
 
+#if !defined(DLT_IEEE802_11_RADIO_AVS)
+#define DLT_IEEE802_11_RADIO_AVS 163
+#endif
 
+#if !defined(DLT_LINUX_SLL)
+#define DLT_LINUX_SLL 113
+#endif
+
+#if !defined(DLT_PRISM_HEADER)
+#define DLT_PRISM_HEADER 119
+#endif
+
+#if !defined(DLT_AIRONET_HEADER)
+#define DLT_AIRONET_HEADER 120
+#endif
+
+#if !defined(PCAP_NETMASK_UNKNOWN)
+/*
+ * Value to pass to pcap_compile() as the netmask if you don't know what
+ * the netmask is.
+ */
+#define PCAP_NETMASK_UNKNOWN    0xffffffff
+#endif
 
 static VALUE rb_cPcap;
 

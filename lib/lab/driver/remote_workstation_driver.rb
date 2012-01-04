@@ -23,38 +23,38 @@ class RemoteWorkstationDriver < VmDriver
 	end
 
 	def start
-		system_command("ssh #{@user}@#{@host} \"vmrun -T ws start \'#{@location}\' nogui\"")
+		remote_system_command("vmrun -T ws start \'#{@location}\' nogui")
 	end
 
 	def stop
-		system_command("ssh #{@user}@#{@host} \"vmrun -T ws stop \'#{@location}\' nogui\"")
+		remote_system_command("vmrun -T ws stop \'#{@location}\' nogui")
 	end
 
 	def suspend
-		system_command("ssh #{@user}@#{@host} \"vmrun -T ws suspend \'#{@location}\' nogui\"")
+		remote_system_command("vmrun -T ws suspend \'#{@location}\' nogui")
 	end
 
 	def pause
-		system_command("ssh #{@user}@#{@host} \"vmrun -T ws pause \'#{@location}\' nogui\"")
+		remote_system_command("vmrun -T ws pause \'#{@location}\' nogui")
 	end
 
 	def reset
-		system_command("ssh #{@user}@#{@host} \"vmrun -T ws reset \'#{@location}\' nogui\"")
+		remote_system_command("vmrun -T ws reset \'#{@location}\' nogui")
 	end
 
 	def create_snapshot(snapshot)
 		snapshot = filter_input(snapshot)
-		system_command("ssh #{@user}@#{@host} \"vmrun -T ws snapshot \'#{@location}\' #{snapshot} nogui\"")
+		remote_system_command("vmrun -T ws snapshot \'#{@location}\' #{snapshot} nogui")
 	end
 
 	def revert_snapshot(snapshot)
 		snapshot = filter_input(snapshot)
-		system_command("ssh #{@user}@#{@host} \"vmrun -T ws revertToSnapshot \'#{@location}\' #{snapshot} nogui\"")
+		remote_system_command("vmrun -T ws revertToSnapshot \'#{@location}\' #{snapshot} nogui")
 	end
 
 	def delete_snapshot(snapshot)
 		snapshot = filter_input(snapshot)
-		system_command("ssh #{@user}@#{@host} \"vmrun -T ws deleteSnapshot \'#{@location}\' #{snapshot} nogui\"" )
+		remote_system_command("vmrun -T ws deleteSnapshot \'#{@location}\' #{snapshot} nogui" )
 	end
 	
 	def run_command(command)
@@ -88,13 +88,13 @@ class RemoteWorkstationDriver < VmDriver
 
 			# now run it on the guest
 			vmrunstr = "ssh #{@user}@#{@host} \"vmrun -T ws -gu #{@vm_user} -gp #{@vm_pass} " + 
-					"runProgramInGuest \'#{@location}\' -noWait -activeWindow \'#{remote_run_command}\'\""
+					"runProgramInGuest \'#{@location}\' -noWait -activeWindow \'#{remote_run_command}\'"
 			system_command(vmrunstr)
 
 			## CLEANUP
 			# delete it on the guest
 			vmrunstr = "ssh #{@user}@#{@host} \"vmrun -T ws -gu #{@vm_user} -gp #{@vm_pass} " + 
-					"deleteFileInGuest \'#{@location}\' \'#{remote_tempfile_path}\'\""
+					"deleteFileInGuest \'#{@location}\' \'#{remote_tempfile_path}\'"
 			system_command(vmrunstr)
 
 			# and delete it on the vm host
@@ -111,12 +111,12 @@ class RemoteWorkstationDriver < VmDriver
 				ssh_exec(remote_run_command)
 				ssh_exec("rm #{remote_tempfile_path}")
 			else
-				raise "zomgwtfbbqnotools"
+				raise "Not Implemented - Install VmWare Tools"
 			end	
 		end
 	end
 	
-	def copy_from(from, to)
+	def copy_from_guest(from, to)
 		from = filter_input(from)
 		to = filter_input(to)
 		
@@ -126,15 +126,14 @@ class RemoteWorkstationDriver < VmDriver
 
 		if @tools 
 					
-			vmrunstr = "ssh #{@user}@#{@host} \"vmrun -T ws -gu #{@vm_user} -gp #{@vm_pass} " +
-					"copyFileFromGuestToHost \'#{@location}\' \'#{from}\' \'#{to}\' nogui\"" 
-			system_command(vmrunstr)
+			remote_system_command("ssh #{@user}@#{@host} \"vmrun -T ws -gu #{@vm_user} -gp #{@vm_pass} " +
+					"copyFileFromGuestToHost \'#{@location}\' \'#{from}\' \'#{to}\' nogui")
 		else
 			scp_to(from,to)
 		end
 	end
 
-	def copy_to(from, to)
+	def copy_to_guest(from, to)
 	
 		from = filter_input(from)
 		to = filter_input(to)
@@ -144,9 +143,8 @@ class RemoteWorkstationDriver < VmDriver
 		system_command(remote_copy_command)
 		
 		if @tools
-			vmrunstr = "ssh #{@user}@#{@host} \"vmrun -T ws -gu #{@vm_user} -gp #{@vm_pass} " +
-					"copyFileFromHostToGuest \'#{@location}\' \'#{from}\' \'#{to}\' nogui\""  
-			system_command(vmrunstr)
+			remote_system_command("vmrun -T ws -gu #{@vm_user} -gp #{@vm_pass} " +
+					"copyFileFromHostToGuest \'#{@location}\' \'#{from}\' \'#{to}\' nogui")
 		else
 			scp_to(from,to)
 		end
@@ -156,11 +154,10 @@ class RemoteWorkstationDriver < VmDriver
 		
 		if @tools
 			file = filter_input(file)
-			vmrunstr = "\"ssh #{@user}@#{@host} vmrun -T ws -gu #{@vm_user} -gp #{@vm_pass} " +
-					"fileExistsInGuest \'#{@location}\' \'{file}\' nogui\""
-			system_command(vmrunstr)
+			remote_system_command("vmrun -T ws -gu #{@vm_user} -gp #{@vm_pass} " +
+					"fileExistsInGuest \'#{@location}\' \'{file}\' nogui")
 		else
-			raise "not implemented"
+			raise "Not Implemented - Install VmWare Tools"
 		end
 	end
 
@@ -168,11 +165,10 @@ class RemoteWorkstationDriver < VmDriver
 		directory = filter_input(directory)
 	
 		if @tools
-			vmrunstr = "\"ssh #{@user}@#{@host} vmrun -T ws -gu #{@vm_user} -gp #{@vm_pass} " +
-					"createDirectoryInGuest \'#{@location}\' \'#{directory}\' nogui\""
-			system_command(vmrunstr)
+			remote_system_command("ssh #{@user}@#{@host} vmrun -T ws -gu #{@vm_user} -gp #{@vm_pass} " +
+					"createDirectoryInGuest \'#{@location}\' \'#{directory}\' nogui")
 		else
-			raise "not implemented"
+			raise "Not Implemented - Install VmWare Tools"
 		end
 	end
 
@@ -181,17 +177,21 @@ class RemoteWorkstationDriver < VmDriver
 	end
 
 	def running?
-		## Get running VMs
-		running = `ssh #{@user}@#{@host} \"vmrun list nogui\"`
-		running_array = running.split("\n")
-		running_array.shift
 
-		running_array.each do |vmx|
-			if vmx.to_s == @location.to_s
-				return true
+		# Get running VMs
+		running = remote_system_command("vmrun list nogui")
+		
+		if running
+			running_array = running.split("\n")
+			running_array.shift
+
+			running_array.each do |vmx|
+				if vmx.to_s == @location.to_s
+					return true
+				end
 			end
 		end
-
+		
 		false
 	end
 

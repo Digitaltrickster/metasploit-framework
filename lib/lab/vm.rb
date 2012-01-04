@@ -6,8 +6,9 @@ module Lab
 class Vm
 	
 	attr_accessor :vmid
+	attr_accessor :hostname
 	attr_accessor :name
-	attr_accessor :descripition
+	attr_accessor :description
 	attr_accessor :location
 	attr_accessor :driver
 	attr_accessor :credentials
@@ -17,7 +18,9 @@ class Vm
 	attr_accessor :host
 	attr_accessor :os
 	attr_accessor :arch
-
+	attr_accessor :tags 
+	attr_accessor :type
+	
 	## Initialize takes a vm configuration hash of the form
 	##  - vmid (unique identifier)
 	##    driver (vm technology)
@@ -47,7 +50,7 @@ class Vm
 		@driver_type.downcase!
 
 		@location = filter_input(config['location'])
-		@name = config['name'] || ""
+		#@name = config['name'] || ""
 		@description = config['description'] || ""
 		@tools = config['tools'] || ""
 		@os = config['os'] || ""			
@@ -65,12 +68,13 @@ class Vm
 		# Only applicable to remote systems
 		@user = filter_input(config['user']) || nil
 		@host = filter_input(config['host']) || nil
+		@port = filter_input(config['port']) || nil
 		@pass = filter_input(config['pass']) || nil
 
 		#Only dynagen systems need this
 		@platform = config['platform']
 
-		#Only fog system need this
+		#Only fog systems need this
 		@fog_config = config['fog_config']
 
 		# Process the correct driver
@@ -97,8 +101,6 @@ class Vm
 		# Load in a list of modifiers. These provide additional methods
 		# Currently it is up to the user to verify that 
 		# modifiers are properly used with the correct VM image.
-		#
-		# If not, the results are likely to be disasterous.
 		@modifiers = config['modifiers']
 		
 		if @modifiers	
@@ -108,6 +110,14 @@ class Vm
 				# modifier likely didn't exist
 			end 		
 		end
+
+		# Consume all tags
+		@tags = config['tags']
+	end
+	
+	def tagged?(tag_name)
+		return false unless @tags
+		return true if @tags.include?(tag_name)
 	end
 	
 	def running?
@@ -159,12 +169,12 @@ class Vm
 		@driver.start
 	end
 
-	def copy_to(from,to)
-		@driver.copy_to(from,to)
+	def copy_to_guest(from,to)
+		@driver.copy_to_guest(from,to)
 	end
 	
-	def copy_from(from,to)
-		@driver.copy_from(from,to)
+	def copy_from_guest(from,to)
+		@driver.copy_from_guest(from,to)
 	end
 	
 	def run_command(command)
@@ -192,7 +202,7 @@ class Vm
 	end
 
 	def to_s
-		return "#{@vmid}"
+		return "#{@hostname}"
 	end
 
 	def to_yaml
@@ -219,6 +229,10 @@ class Vm
 
 		if @fog_config
 			out += @fog_config.to_yaml
+		end
+
+		if @dynagen_config
+			out += @dynagen_config.to_yaml
 		end
 
 		out += "   credentials:\n"

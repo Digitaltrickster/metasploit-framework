@@ -25,14 +25,14 @@ class Metasploit3 < Msf::Auxiliary
 			'Version'        => '$Revision$',
 			'Description'    => %Q{
 					This module attempts to crack Postgres SQL md5 password hashes.
-				It creates hashes based on information saved in the MSF Database 
-				such as hostnames, usernames,passwords, and database schema information.
+				It creates hashes based on information saved in the MSF Database
+				such as hostnames, usernames, passwords, and database schema information.
 				The user can also supply an additional external wordlist if they wish.
 			},
 			'Author'         => ['TheLightCosine <thelightcosine[at]gmail.com>'],
 			'License'        => MSF_LICENSE
 		)
-		
+
 		register_options(
 			[
 				OptPath.new('Wordlist', [false, 'The path to an optional Wordlist']),
@@ -49,12 +49,12 @@ class Metasploit3 < Msf::Auxiliary
 
 		print_status("Wordlist length: #{@seed.length}")
 
-		myloots = myworkspace.loots.where('ltype=?', 'postgres.hashes')
+		myloots = myworkspace.loots.find(:all, :conditions => ['ltype=?', 'postgres.hashes'])
 		unless myloots.nil?
 			myloots.each do |myloot|
 				begin
 					postgres_array = CSV.read(myloot.path).drop(1)
-				rescue 
+				rescue
 					print_error("Unable to process #{myloot.path}")
 				end
 				postgres_array.each do |row|
@@ -69,7 +69,7 @@ class Metasploit3 < Msf::Auxiliary
 							:user => row[0],
 							:pass => password
 						)
-						
+
 					end
 				end
 			end
@@ -95,7 +95,7 @@ class Metasploit3 < Msf::Auxiliary
 
 		seed = []
 		#Seed the wordlist with Database , Table, and Instance Names
-		schemas = myworkspace.notes.where('ntype like ?', '%.schema%')
+		schemas = myworkspace.notes.find(:all, :conditions => ['ntype like ?', '%.schema%'])
 		unless schemas.nil? or schemas.empty?
 			schemas.each do |anote|
 				anote.data.each do |key,value|
@@ -105,7 +105,7 @@ class Metasploit3 < Msf::Auxiliary
 			end
 		end
 
-		instances = myworkspace.notes.where('ntype=?', 'mssql.instancename')
+		instances = myworkspace.notes.find(:all, :conditions => ['ntype=?', 'mssql.instancename'])
 		unless instances.nil? or instances.empty?
 			instances.each do |anote|
 				seed << anote.data['InstanceName']
@@ -115,7 +115,7 @@ class Metasploit3 < Msf::Auxiliary
 		# Seed the wordlist with usernames, passwords, and hostnames
 
 		myworkspace.hosts.find(:all).each {|o| seed << john_expand_word( o.name ) if o.name }
-		myworkspace.creds.each do |o| 
+		myworkspace.creds.each do |o|
 			seed << john_expand_word( o.user ) if o.user
 			seed << john_expand_word( o.pass ) if (o.pass and o.ptype !~ /hash/)
 		end
@@ -124,11 +124,11 @@ class Metasploit3 < Msf::Auxiliary
 		john_cracked_passwords.values {|v| seed << v }
 
 		#Grab the default John Wordlist
-		john = File.open(john_wordlist_path, "r")
+		john = File.open(john_wordlist_path, "rb")
 		john.each_line{|line| seed << line.chomp}
 
 		if datastore['Wordlist']
-			wordlist= File.open(datastore['Wordlist'], "r")
+			wordlist= File.open(datastore['Wordlist'], "rb")
 			wordlist.each_line{|line| seed << line.chomp}
 		end
 
@@ -139,7 +139,7 @@ class Metasploit3 < Msf::Auxiliary
 			if datastore['Munge']
 				mungedseed=[]
 				seed.each do |word|
-					munged = word.gsub(/[sS]/, "$").gsub(/[aA]/,"@").gsub(/[oO]/,"0")	
+					munged = word.gsub(/[sS]/, "$").gsub(/[aA]/,"@").gsub(/[oO]/,"0")
 					mungedseed << munged
 					munged.gsub!(/[eE]/, "3")
 					munged.gsub!(/[tT]/, "7")

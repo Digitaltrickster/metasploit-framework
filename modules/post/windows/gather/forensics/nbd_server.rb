@@ -26,7 +26,7 @@ class Metasploit3 < Msf::Post
 			'Version'       => '$Revision$',
 			'Platform'      => ['windows'],
 			'SessionTypes'  => ['meterpreter'],
-			'Author'        => ['Wesley McGrew <wesley@mcgrewsecurity.com>']
+			'Author'        => ['Wesley McGrew <wesley[at]mcgrewsecurity.com>']
 		))
 		register_options(
 			[
@@ -58,7 +58,7 @@ class Metasploit3 < Msf::Post
 
 		geometry = ioctl['lpOutBuffer']
 		disk_size = geometry[24,31].unpack('Q')[0]
-		
+
 		socket = Rex::Socket::TcpServer.create({'LocalHost'=>ip_addr,'LocalPort'=>port})
 		print_line("Listening on #{ip_addr}:#{port}")
 		print_line("Serving #{devname} (#{disk_size} bytes)")
